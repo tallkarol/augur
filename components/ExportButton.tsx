@@ -7,7 +7,7 @@ import { useState } from "react"
 interface ExportButtonProps {
   endpoint: string
   filename?: string
-  params?: Record<string, string | number>
+  params?: Record<string, string | number | undefined>
   variant?: "default" | "outline" | "ghost"
   size?: "default" | "sm" | "lg" | "icon"
   children?: React.ReactNode

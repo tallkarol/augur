@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { format, parseISO } from 'date-fns'
 import { arrayToCSV } from '@/lib/export'
+import { getServerSettings } from '@/lib/formatUtilsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -78,6 +79,12 @@ export async function GET(request: NextRequest) {
       artistData.positions.push(entry.position)
     })
 
+    // Get export settings
+    const settings = await getServerSettings()
+    const exportSettings = settings.export || {}
+    const includeStreams = exportSettings.includeStreams !== false
+    const includePositions = exportSettings.includePositions !== false
+
     // Convert to array and format for CSV
     const csvData = Array.from(artistMap.values())
       .map((data) => {
@@ -85,21 +92,32 @@ export async function GET(request: NextRequest) {
           data.positions.reduce((a, b) => a + b, 0) / data.positions.length
         const topTrack = data.tracks.sort((a, b) => a.position - b.position)[0]?.name || ''
 
-        return {
-          Rank: data.currentPosition,
+        const row: Record<string, any> = {
           Artist: data.artist.name,
-          'Best Position': data.bestPosition,
-          'Current Position': data.currentPosition,
-          'Average Position': Math.round(avgPosition * 10) / 10,
           'Top Track': topTrack,
           'Track Count': data.tracks.length,
-          'Total Streams': data.totalStreams.toString(),
-          Genres: Array.isArray(data.artist.genres) ? data.artist.genres.join('; ') : '',
-          Popularity: data.artist.popularity || '',
-          Followers: data.artist.followers?.toString() || '',
         }
+
+        if (includePositions) {
+          row.Rank = data.currentPosition
+          row['Best Position'] = data.bestPosition
+          row['Current Position'] = data.currentPosition
+          row['Average Position'] = Math.round(avgPosition * 10) / 10
+        }
+
+        if (includeStreams && data.totalStreams) {
+          row['Total Streams'] = data.totalStreams.toString()
+        }
+
+        row.Genres = Array.isArray(data.artist.genres) ? data.artist.genres.join('; ') : ''
+        row.Popularity = data.artist.popularity || ''
+        if (data.artist.followers) {
+          row.Followers = data.artist.followers.toString()
+        }
+
+        return row
       })
-      .sort((a, b) => a['Current Position'] - b['Current Position'])
+      .sort((a, b) => (a['Current Position'] || 999) - (b['Current Position'] || 999))
       .slice(0, limit)
 
     const csv = arrayToCSV(csvData)

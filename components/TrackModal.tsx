@@ -10,11 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { PositionChart } from "@/components/PositionChart"
 import { StreamsChart } from "@/components/StreamsChart"
 import { Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { SpotifyWidget } from "@/components/SpotifyWidget"
+import { cn } from "@/lib/utils"
 
 interface TrackModalProps {
   trackId: string | null
@@ -38,6 +40,7 @@ export function TrackModal({
   const [artist, setArtist] = useState<any>(null)
   const [chartHistory, setChartHistory] = useState<any[]>([])
   const [stats, setStats] = useState<any>(null)
+  const [selectedPeriod, setSelectedPeriod] = useState<'last30Days' | 'thisYear'>('last30Days')
 
   useEffect(() => {
     if (open && trackId) {
@@ -170,8 +173,83 @@ export function TrackModal({
           </div>
         ) : track ? (
           <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Period Selector */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={selectedPeriod === 'last30Days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPeriod('last30Days')}
+                className="text-xs"
+              >
+                LAST 30 DAYS
+              </Button>
+              <Button
+                variant={selectedPeriod === 'thisYear' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPeriod('thisYear')}
+                className="text-xs"
+              >
+                THIS YEAR
+              </Button>
+            </div>
+
+            {/* Period-Specific Stats */}
+            {stats && (stats.last30Days || stats.thisYear) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Highest Position</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days' 
+                        ? (stats.last30Days?.highestPosition ? `#${stats.last30Days.highestPosition}` : 'N/A')
+                        : (stats.thisYear?.highestPosition ? `#${stats.thisYear.highestPosition}` : 'N/A')}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Avg Position</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.averagePosition ? `#${stats.last30Days.averagePosition.toFixed(1)}` : 'N/A')
+                        : (stats.thisYear?.averagePosition ? `#${stats.thisYear.averagePosition.toFixed(1)}` : 'N/A')}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Days in Top 10</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.daysInTop10 ?? 0)
+                        : (stats.thisYear?.daysInTop10 ?? 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Days in Top 20</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.daysInTop20 ?? 0)
+                        : (stats.thisYear?.daysInTop20 ?? 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Legacy Stats Grid (fallback) */}
+            {stats && !stats.last30Days && !stats.thisYear && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Best Position</CardDescription>
@@ -215,6 +293,64 @@ export function TrackModal({
                 </CardContent>
               </Card>
             </div>
+            )}
+
+            {/* Dashboard Metrics */}
+            {stats?.leadScore !== undefined && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Performance Metrics</CardTitle>
+                  <CardDescription>Dashboard-style analytics</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Lead Score</div>
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {stats.leadScore}
+                      </div>
+                    </div>
+                    {stats.leadScoreBreakdown && (
+                      <>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Days in Top 10</div>
+                          <div className="text-xl font-semibold">
+                            {stats.leadScoreBreakdown.daysInTop10}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Days in Top 20</div>
+                          <div className="text-xl font-semibold">
+                            {stats.leadScoreBreakdown.daysInTop20}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Total Days</div>
+                          <div className="text-xl font-semibold">
+                            {stats.leadScoreBreakdown.totalDays}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {stats.hasRisingTrend && (
+                    <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                        📈 Rising Trend Detected
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        This track shows consistent upward momentum
+                      </div>
+                    </div>
+                  )}
+                  {stats.consistencyScore !== null && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Consistency Score: {stats.consistencyScore} (lower = more consistent)
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Track Details */}
             {(track.popularity || track.duration || track.albumName) && (

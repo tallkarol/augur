@@ -25,7 +25,8 @@ export interface ProcessChartResult {
 export async function processChartData(
   data: ParsedChartData,
   region?: string,
-  regionType?: 'city' | 'country' | null
+  regionType?: 'city' | 'country' | null,
+  uploadId?: string
 ): Promise<ProcessChartResult> {
   const result: ProcessChartResult = {
     success: true,
@@ -49,7 +50,7 @@ export async function processChartData(
     
     try {
       console.log(`[ChartProcessor] Processing batch ${i}-${i + batch.length} of ${data.rows.length}`)
-      await processBatch(batch, data, chartDate, region, regionType, result)
+      await processBatch(batch, data, chartDate, region, regionType, result, uploadId)
       console.log(`[ChartProcessor] Completed batch ${i}-${i + batch.length}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -77,7 +78,8 @@ async function processBatch(
   chartDate: Date,
   region: string | undefined,
   regionType: 'city' | 'country' | null | undefined,
-  result: ProcessChartResult
+  result: ProcessChartResult,
+  uploadId?: string
 ): Promise<void> {
   console.log(`[ChartProcessor] Starting batch processing for ${batch.length} rows`)
   
@@ -146,7 +148,8 @@ async function processBatch(
         chartDate,
         region,
         regionType,
-        result
+        result,
+        uploadId
       )
     })
     await Promise.all(entryPromises)
@@ -259,7 +262,8 @@ async function upsertChartEntry(
   chartDate: Date,
   region: string | undefined,
   regionType: 'city' | 'country' | null | undefined,
-  result: ProcessChartResult
+  result: ProcessChartResult,
+  uploadId?: string
 ): Promise<void> {
   // Check if entry already exists
   const { data: existing } = await supabase
@@ -288,6 +292,7 @@ async function upsertChartEntry(
     previousRank: row.previousRank || null,
     daysOnChart: row.daysOnChart || null,
     streams: row.streams ? BigInt(row.streams) : null,
+    uploadId: uploadId || null,
   }
 
   if (existing && existing.length > 0) {

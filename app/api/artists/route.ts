@@ -2,37 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { format, parseISO } from 'date-fns'
 import { autoEnrichArtists } from '@/lib/autoEnrich'
-
-async function getAvailableDates(): Promise<string[]> {
-  try {
-    const { data, error } = await supabase
-      .from('chart_entries')
-      .select('date')
-      .eq('platform', 'spotify')
-      .order('date', { ascending: false })
-
-    if (error) {
-      console.error('[ArtistsAPI] Error fetching available dates:', error)
-      return []
-    }
-
-    const dates = [...new Set((data || []).map(e => format(new Date(e.date), 'yyyy-MM-dd')))].sort()
-    return dates
-  } catch (error) {
-    console.error('[ArtistsAPI] Error getting available dates:', error)
-    return []
-  }
-}
+import { getAvailableDates } from '@/lib/serverUtils'
+import { normalizeRegion } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const dateParam = searchParams.get('date')
     const limitParam = searchParams.get('limit')
+    const offsetParam = searchParams.get('offset')
     const periodParam = searchParams.get('period') as 'daily' | 'weekly' | 'monthly' || 'daily'
     const chartTypeParam = searchParams.get('chartType') as 'regional' | 'viral' || 'regional'
     const regionParam = searchParams.get('region') || null
     const limit = limitParam ? parseInt(limitParam, 10) : 50
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0
 
     const availableDates = await getAvailableDates()
     const date = dateParam ? dateParam : (availableDates[availableDates.length - 1] || format(new Date(), 'yyyy-MM-dd'))
@@ -54,20 +37,23 @@ export async function GET(request: NextRequest) {
       .limit(limit * 10) // Get more entries to aggregate
 
     // Handle region filter
-    if (regionParam === null || regionParam === 'global' || regionParam === '') {
+    const normalizedRegion = normalizeRegion(regionParam)
+    if (normalizedRegion === null) {
       query = query.is('region', null)
     } else {
-      query = query.eq('region', regionParam)
+      query = query.eq('region', normalizedRegion)
     }
 
     const { data, error } = await query
 
     if (error) {
       console.error('[ArtistsAPI] Database error:', error)
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         { error: 'Failed to fetch artists', details: error.message },
         { status: 500 }
       )
+      errorResponse.headers.set('Cache-Control', 'no-store')
+      return errorResponse
     }
 
     const chartEntries = data || []
@@ -138,7 +124,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Convert to array and sort by best position
-    const artists = Array.from(artistMap.values())
+    const allArtists = Array.from(artistMap.values())
       .map(data => {
         const chartTypes = chartTypesMap.get(data.artist.id) || new Set()
         return {
@@ -155,7 +141,9 @@ export async function GET(request: NextRequest) {
         }
       })
       .sort((a, b) => a.bestPosition - b.bestPosition)
-      .slice(0, limit)
+    
+    const total = allArtists.length
+    const artists = allArtists.slice(offset, offset + limit)
 
     // Auto-enrich top artists in background (non-blocking)
     const topArtistIds = artists.slice(0, 5).map(a => a.id)
@@ -163,20 +151,30 @@ export async function GET(request: NextRequest) {
       // Silently handle errors
     })
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       artists: artists || [], 
+      total,
+      limit,
+      offset,
       date: format(latestDate, 'yyyy-MM-dd'),
       chartType: chartTypeParam,
       chartPeriod: periodParam,
       region: regionParam,
       availableDates,
     })
+
+    // Add caching headers - cache for 1 minute
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    
+    return response
   } catch (error) {
     console.error('Error fetching artists:', error)
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { error: 'Failed to fetch artists' },
       { status: 500 }
     )
+    errorResponse.headers.set('Cache-Control', 'no-store')
+    return errorResponse
   }
 }
 

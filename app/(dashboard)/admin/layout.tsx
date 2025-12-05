@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation"
 import { Typography } from "@/components/typography"
 import Link from "next/link"
-import { Settings, Database, Upload, Cog } from "lucide-react"
+import { Settings, Upload, TrendingUp, LayoutDashboard, Download, Users } from "lucide-react"
 
 export default function AdminLayout({
   children,
@@ -11,6 +11,39 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+
+  const navItems = [
+    {
+      href: "/admin/settings",
+      label: "System Settings",
+      icon: Settings,
+    },
+    {
+      href: "/admin/settings/csv-upload",
+      label: "CSV Upload",
+      icon: Upload,
+    },
+    {
+      href: "/admin/settings/lead-score",
+      label: "Lead Score",
+      icon: TrendingUp,
+    },
+    {
+      href: "/admin/settings/dashboard",
+      label: "Dashboard Settings",
+      icon: LayoutDashboard,
+    },
+    {
+      href: "/admin/settings/export",
+      label: "Export Settings",
+      icon: Download,
+    },
+    {
+      href: "/admin/settings/tracked-artists",
+      label: "Tracked Artists",
+      icon: Users,
+    },
+  ]
 
   return (
     <div className="flex min-h-screen">
@@ -21,51 +54,29 @@ export default function AdminLayout({
             Admin Panel
           </Typography>
         </div>
-        <nav className="space-y-2">
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            // For the main settings page, only match exact path
+            // For subpages, match if pathname starts with the href
+            const isActive = item.href === "/admin/settings" 
+              ? pathname === "/admin/settings"
+              : pathname === item.href || pathname.startsWith(item.href + "/")
+            return (
           <Link
-            href="/admin/charts"
+                key={item.href}
+                href={item.href}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-              pathname === "/admin/charts"
+                  isActive
                 ? "bg-primary text-primary-foreground"
                 : "hover:bg-muted"
             }`}
           >
-            <Settings className="h-4 w-4" />
-            Chart Configs
+                <Icon className="h-4 w-4" />
+                {item.label}
           </Link>
-          <Link
-            href="/admin/backfill"
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-              pathname === "/admin/backfill"
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted"
-            }`}
-          >
-            <Database className="h-4 w-4" />
-            Backfill Data
-          </Link>
-          <Link
-            href="/admin/upload"
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-              pathname === "/admin/upload"
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted"
-            }`}
-          >
-            <Upload className="h-4 w-4" />
-            Upload CSV
-          </Link>
-          <Link
-            href="/admin/settings"
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-              pathname === "/admin/settings"
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-muted"
-            }`}
-          >
-            <Cog className="h-4 w-4" />
-            Settings
-          </Link>
+            )
+          })}
         </nav>
       </aside>
 

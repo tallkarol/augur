@@ -70,12 +70,14 @@ export async function POST(request: NextRequest) {
 
     // Handle duplicates
     if (duplicateCheck.exists) {
+      // Map 'show-warning' to 'replace' for API calls (show-warning is for UI)
+      const actionForHandle = dedupAction === 'show-warning' ? 'replace' : dedupAction
       const handleResult = await handleDuplicates(
         chartDate,
         chartType,
         chartPeriod,
         null,
-        dedupAction
+        actionForHandle as 'skip' | 'update' | 'replace'
       )
 
       if (handleResult.skipped) {

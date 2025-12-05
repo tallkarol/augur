@@ -24,6 +24,7 @@ model Artist {
 
   tracks      Track[]
   chartEntries ChartEntry[]
+  trackedArtist TrackedArtist?
 
   @@index([name, platform])
   @@index([platform])
@@ -70,17 +71,21 @@ model ChartEntry {
   previousRank  Int?
   daysOnChart   Int?
   streams       BigInt?
+  uploadId      String?  // Reference to CsvUpload for audit trail
   createdAt     DateTime @default(now())
+  lastUpdatedAt DateTime @updatedAt
 
   track         Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
   artist        Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
 
+  @@unique([trackId, artistId, date, chartType, chartPeriod, region, platform])
   @@index([date])
   @@index([platform, date])
   @@index([position])
   @@index([trackId, date])
   @@index([artistId, date])
   @@index([chartType, chartPeriod, region])
+  @@index([uploadId])
   @@map("chart_entries")
 }
 
@@ -173,5 +178,18 @@ model User {
   @@index([email])
   @@index([role])
   @@map("users")
+}
+
+model TrackedArtist {
+  id            String   @id @default(cuid())
+  artistId      String   @unique
+  notes         String?  // Optional notes about why this artist is tracked
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  artist        Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@index([artistId])
+  @@map("tracked_artists")
 }
 

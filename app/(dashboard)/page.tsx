@@ -1,44 +1,124 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Typography } from "@/components/typography"
-import { DashboardFilters } from "@/components/DashboardFilters"
-import { TrendingTable } from "@/components/TrendingTable"
+import { ExecutiveSummary } from "@/components/ExecutiveSummary"
+import { BiggestMoversCard } from "@/components/BiggestMoversCard"
+import { NewEntriesCard } from "@/components/NewEntriesCard"
+import { LeadScoreLeadersCard } from "@/components/LeadScoreLeadersCard"
+import { RisingStarsCard } from "@/components/RisingStarsCard"
 import { TrackModal } from "@/components/TrackModal"
-import { ArtistModal } from "@/components/ArtistModal"
-import { TrendingUp, TrendingDown, Sparkles, ArrowDown, Users, Music } from "lucide-react"
-import { format } from "date-fns"
-import type { Period } from "@/components/PeriodSelector"
+import { DateRangeSelector, type DateRange, type DateRangePreset } from "@/components/DateRangeSelector"
+import { format, subDays, startOfYear } from "date-fns"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
+import { Settings, Globe } from "lucide-react"
 
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [date, setDate] = useState<string>("")
-  const [period, setPeriod] = useState<Period>("daily")
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [dateRange, setDateRange] = useState<DateRange>({ startDate: '', endDate: '' })
+  const [selectedPreset, setSelectedPreset] = useState<DateRangePreset>('yesterday')
+  const [region, setRegion] = useState<'us' | 'global'>('us')
   const [chartType, setChartType] = useState<'regional' | 'viral' | 'blended'>('blended')
-  const [region, setRegion] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
-  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null)
+
+  // Load settings on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/admin/settings')
+        const data = await res.json()
+        const dashboardSettings = data.settings?.dashboard || {}
+        
+        // Apply default chart type
+        if (dashboardSettings.defaultChartType) {
+          setChartType(dashboardSettings.defaultChartType as 'regional' | 'viral' | 'blended')
+        }
+        
+        // Apply default region
+        if (dashboardSettings.defaultRegion) {
+          setRegion(dashboardSettings.defaultRegion as 'us' | 'global')
+        }
+        
+        // Apply default date range preset
+        const defaultPreset = dashboardSettings.defaultDateRange || 'yesterday'
+        setSelectedPreset(defaultPreset as DateRangePreset)
+        
+        // Calculate date range based on preset
+        const today = new Date()
+        let startDate = ''
+        let endDate = ''
+        
+        switch (defaultPreset) {
+          case 'yesterday':
+            const yesterday = format(subDays(today, 1), 'yyyy-MM-dd')
+            startDate = yesterday
+            endDate = yesterday
+            break
+          case 'lastWeek':
+            const yesterdayDate = subDays(today, 1)
+            const weekAgo = subDays(yesterdayDate, 7)
+            startDate = format(weekAgo, 'yyyy-MM-dd')
+            endDate = format(yesterdayDate, 'yyyy-MM-dd')
+            break
+          case 'last30':
+            startDate = format(subDays(today, 30), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          case 'last90':
+            startDate = format(subDays(today, 90), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          case 'thisYear':
+            startDate = format(startOfYear(today), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          default:
+            const defaultYesterday = format(subDays(today, 1), 'yyyy-MM-dd')
+            startDate = defaultYesterday
+            endDate = defaultYesterday
+        }
+        
+        setDateRange({ startDate, endDate })
+        setSettingsLoaded(true)
+      } catch (error) {
+        console.error("Failed to load settings:", error)
+        // Fallback to defaults
+        const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd')
+        setDateRange({ startDate: yesterday, endDate: yesterday })
+        setSelectedPreset('yesterday')
+        setSettingsLoaded(true)
+      }
+    }
+    loadSettings()
+  }, [])
 
   useEffect(() => {
     async function loadDashboard() {
+      if (!dateRange.startDate || !dateRange.endDate) return
+      
       try {
         const params = new URLSearchParams({
-          date: date || '',
-          period: period,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
           chartType: chartType,
+          chartPeriod: 'daily', // Always use daily data
         })
-        if (region) params.set('region', region)
-        else params.set('region', '')
+        if (region === 'us') {
+          params.set('region', 'us')
+        } else if (region === 'global') {
+          params.set('region', 'global')
+        }
         
-        const res = await fetch(`/api/dashboard?${params}`)
+        const res = await fetch(`/api/dashboard?${params}`, {
+          cache: 'no-store',
+        })
         const data = await res.json()
         setDashboardData(data)
-        if (data.date) setDate(data.date)
         if (data.availableDates) setAvailableDates(data.availableDates)
       } catch (error) {
         console.error("Failed to load dashboard:", error)
@@ -46,8 +126,10 @@ export default function Dashboard() {
         setLoading(false)
       }
     }
+    if (settingsLoaded) {
     loadDashboard()
-  }, [date, period, chartType, region])
+    }
+  }, [dateRange, region, chartType, settingsLoaded])
 
   if (loading) {
     return (
@@ -68,201 +150,125 @@ export default function Dashboard() {
     )
   }
 
-  const getChartTypeLabel = () => {
-    if (chartType === 'viral') return 'Viral 50'
-    if (chartType === 'regional') return 'Top 50'
-    return 'Blended (Viral + Top 50)'
+  const viewType = dashboardData?.viewType || 'daily'
+  const summary = dashboardData?.summary || {}
+
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range)
+    // Determine preset based on range
+    const daysDiff = Math.ceil(
+      (new Date(range.endDate).getTime() - new Date(range.startDate).getTime()) / (1000 * 60 * 60 * 24)
+    )
+    if (daysDiff === 0) {
+      setSelectedPreset('yesterday')
+    } else if (daysDiff === 7) {
+      setSelectedPreset('lastWeek')
+    } else if (daysDiff <= 30) {
+      setSelectedPreset('last30')
+    } else if (daysDiff <= 90) {
+      setSelectedPreset('last90')
+    } else {
+      setSelectedPreset('thisYear')
+    }
   }
 
   return (
-    <div className="p-8 space-y-8">
-      {/* Header Section */}
-      <div className="space-y-4">
+    <div className="p-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <Typography variant="h1">Talent Discovery</Typography>
-          <Typography variant="subtitle" className="mt-2">
-            {date && `Data as of ${format(new Date(date), 'MMMM d, yyyy')} (${period})`}
-            {region && ` • ${region}`}
+          <Typography variant="h1">Dashboard</Typography>
+          <Typography variant="subtitle" className="mt-1">
+            {dateRange.startDate && dateRange.endDate && (
+              dateRange.startDate === dateRange.endDate
+                ? format(new Date(dateRange.startDate), 'MMMM d, yyyy')
+                : `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d, yyyy')}`
+            )}
           </Typography>
         </div>
+        <div className="flex items-center gap-3">
+          {/* US/GLOBAL Toggle */}
+          <Tabs value={region} onValueChange={(v) => setRegion(v as 'us' | 'global')}>
+            <TabsList>
+              <TabsTrigger value="us">US</TabsTrigger>
+              <TabsTrigger value="global">GLOBAL</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Link href="/dashboard/analytics">
+            <Button variant="outline" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Advanced View
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-        {/* Chart Type Tabs - Full Width */}
-        <Tabs value={chartType} onValueChange={(value) => {
-          if (value === 'top') {
-            setChartType('regional')
-          } else {
-            setChartType(value as 'regional' | 'viral' | 'blended')
-          }
-        }} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="viral">VIRAL</TabsTrigger>
-            <TabsTrigger value="top">TOP</TabsTrigger>
-            <TabsTrigger value="blended">BLENDED</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Chart Type Tabs */}
+      <Tabs value={chartType} onValueChange={(v) => setChartType(v as 'regional' | 'viral' | 'blended')}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="viral">VIRAL</TabsTrigger>
+          <TabsTrigger value="regional">TOP</TabsTrigger>
+          <TabsTrigger value="blended">BLENDED</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-        {/* Combined Filters - Full Width */}
-        <DashboardFilters
-          date={date}
-          period={period}
-          region={region}
-          availableDates={availableDates}
-          onDateChange={setDate}
-          onPeriodChange={setPeriod}
-          onRegionChange={setRegion}
+      {/* Date Range Selector */}
+      <DateRangeSelector
+        value={selectedPreset}
+        onChange={handleDateRangeChange}
+        onPresetChange={setSelectedPreset}
+      />
+
+      {/* Executive Summary */}
+      {summary && (
+        <ExecutiveSummary
+          viewType={viewType}
+          trackedArtistsTotal={summary.trackedArtistsTotal || 0}
+          trackedArtistsCharting={summary.trackedArtistsCharting || 0}
+          {...(viewType === 'daily' ? {
+            biggestMover: summary.biggestMover,
+            newEntriesCount: summary.newEntriesCount || 0,
+          } : {
+            topLeadScore: summary.topLeadScore,
+            newOpportunitiesCount: summary.newOpportunitiesCount || 0,
+          })}
         />
-      </div>
+      )}
 
-      {/* Main Content Grid */}
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Top Artists - Primary Focus */}
-        <Card className="lg:col-span-2 border-2">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Users className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Top Artists</CardTitle>
-                  <CardDescription>Best performing artists in {getChartTypeLabel()}</CardDescription>
-                </div>
-              </div>
-              <Link 
-                href="/artists" 
-                className="text-sm text-primary hover:underline"
-              >
-                View All →
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {dashboardData.topArtists && dashboardData.topArtists.length > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {dashboardData.topArtists.slice(0, 9).map((artist: any, index: number) => (
-                  <Link
-                    key={artist.id}
-                    href={`/artists/${artist.id}`}
-                    className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted/50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary font-bold text-sm shrink-0">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate group-hover:text-primary transition-colors">
-                        {artist.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {artist.topTrack}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        #{artist.bestPosition} • {artist.trackCount} {artist.trackCount === 1 ? 'track' : 'tracks'}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No artist data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Main Content - Different layouts based on view type */}
+      {viewType === 'daily' ? (
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <BiggestMoversCard
+              movers={dashboardData?.biggestMovers || []}
+              onTrackClick={setSelectedTrackId}
+            />
+            <NewEntriesCard
+              entries={dashboardData?.newEntries || []}
+              onTrackClick={setSelectedTrackId}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <LeadScoreLeadersCard
+            leaders={dashboardData?.leadScoreLeaders || []}
+            onTrackClick={setSelectedTrackId}
+          />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <RisingStarsCard
+              stars={dashboardData?.risingStars || []}
+              onTrackClick={setSelectedTrackId}
+            />
+            <NewEntriesCard
+              entries={dashboardData?.newEntries || []}
+              onTrackClick={setSelectedTrackId}
+            />
+          </div>
+        </>
+      )}
 
-        {/* Rising Talent */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Rising Talent</CardTitle>
-                <CardDescription>Fastest climbing tracks</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {dashboardData.biggestMovers && dashboardData.biggestMovers.length > 0 ? (
-              <TrendingTable 
-                data={dashboardData.biggestMovers.slice(0, 5)} 
-                showArtist={true}
-                onTrackClick={setSelectedTrackId}
-              />
-            ) : (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No rising tracks
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* New Discoveries */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">New Discoveries</CardTitle>
-                <CardDescription>Fresh chart entries</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {dashboardData.newEntries && dashboardData.newEntries.length > 0 ? (
-              <TrendingTable 
-                data={dashboardData.newEntries.slice(0, 5)} 
-                showArtist={true}
-                onTrackClick={setSelectedTrackId}
-              />
-            ) : (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No new entries
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Top Tracks */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Music className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Top Tracks</CardTitle>
-                  <CardDescription>Current chart leaders</CardDescription>
-                </div>
-              </div>
-              <Link 
-                href="/tracks" 
-                className="text-sm text-primary hover:underline"
-              >
-                View All →
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {dashboardData.topTracks && dashboardData.topTracks.length > 0 ? (
-              <TrendingTable 
-                data={dashboardData.topTracks.slice(0, 10)} 
-                showArtist={true}
-                onTrackClick={setSelectedTrackId}
-              />
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No track data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* Track Modal */}
       <TrackModal
         trackId={selectedTrackId}
         open={selectedTrackId !== null}
@@ -270,19 +276,8 @@ export default function Dashboard() {
           if (!open) setSelectedTrackId(null)
         }}
         chartType={chartType === 'blended' ? 'regional' : chartType}
-        chartPeriod={period}
-        region={region}
-      />
-
-      <ArtistModal
-        artistId={selectedArtistId}
-        open={selectedArtistId !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedArtistId(null)
-        }}
-        chartType={chartType === 'blended' ? 'regional' : chartType}
-        chartPeriod={period}
-        region={region}
+        chartPeriod="daily"
+        region={region === 'us' ? 'us' : null}
       />
     </div>
   )

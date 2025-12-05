@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Upload, X, FileText, CheckCircle2, XCircle, AlertCircle, Loader2, Clock } from "lucide-react"
 import { format } from "date-fns"
+import { normalizeRegion, getRegionType } from "@/lib/utils"
 
 interface FileWithStatus {
   file: File
@@ -182,8 +183,8 @@ export default function ImporterPage() {
       }
 
       // Determine region type
-      const regionType = region === 'global' ? null : (region.length === 2 ? 'country' : 'city')
-      const normalizedRegion = region === 'global' ? null : region
+      const normalizedRegion = normalizeRegion(region)
+      const regionType = getRegionType(region)
 
       setFiles((prev) =>
         prev.map((f) =>

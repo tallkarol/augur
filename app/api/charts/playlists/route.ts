@@ -3,6 +3,7 @@ import { fetchViral50Chart, processPlaylistChart } from '@/lib/spotifyPlaylists'
 import { processChartData } from '@/lib/chartProcessor'
 import { checkDuplicates, getDefaultDeduplicationAction, handleDuplicates } from '@/lib/deduplication'
 import { format } from 'date-fns'
+import { normalizeRegion } from '@/lib/utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const fetchDate = date || format(new Date(), 'yyyy-MM-dd')
+    const normalizedRegion = normalizeRegion(region)
 
     console.log(`[PlaylistAPI] Fetching Viral 50 chart for region: ${region}, date: ${fetchDate}`)
 
@@ -34,17 +36,19 @@ export async function POST(request: NextRequest) {
       fetchDate,
       'viral',
       'daily',
-      region === 'global' ? null : region
+      normalizedRegion
     )
 
     // Handle duplicates
     if (duplicateCheck.exists) {
+      // Map 'show-warning' to 'replace' for API calls (show-warning is for UI)
+      const actionForHandle = dedupAction === 'show-warning' ? 'replace' : dedupAction
       const handleResult = await handleDuplicates(
         fetchDate,
         'viral',
         'daily',
-        region === 'global' ? null : region,
-        dedupAction
+        normalizedRegion,
+        actionForHandle as 'skip' | 'update' | 'replace'
       )
 
       if (handleResult.skipped) {
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
     // Process and store
     const result = await processChartData(
       parsedData,
-      region === 'global' ? undefined : region,
+      normalizedRegion || undefined,
       undefined // regionType
     )
 

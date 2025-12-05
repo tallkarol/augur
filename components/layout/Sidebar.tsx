@@ -12,7 +12,8 @@ import {
   TrendingUp, 
   Upload,
   Settings,
-  Search
+  Search,
+  Star
 } from "lucide-react"
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/search", label: "Search", icon: Search },
   { href: "/artists", label: "Artists", icon: Users },
   { href: "/tracks", label: "Tracks", icon: Music },
+  { href: "/tracked-artists", label: "Tracked Artists", icon: Star },
   { href: "/insights", label: "Insights", icon: TrendingUp },
   { href: "/importer", label: "Importer", icon: Upload },
   { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -33,17 +35,17 @@ export function Sidebar() {
   const settingsItem = navItems.find(item => item.href === '/admin/settings')
 
   return (
-    <aside className="w-64 border-r bg-card p-6 flex flex-col h-screen">
+    <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 p-6 flex flex-col h-screen">
       <div className="mb-8">
         <Typography variant="h2" className="text-primary">
           Augur
         </Typography>
-        <Typography variant="body-sm" className="text-muted-foreground mt-1">
+        <Typography variant="body-sm" className="text-slate-600 dark:text-slate-400 mt-1">
           Music Analytics
         </Typography>
       </div>
       
-      <nav className="space-y-2 flex-1">
+      <nav className="space-y-1 flex-1">
         {mainNavItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href
@@ -52,10 +54,10 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-slate-700 dark:text-slate-300 hover:bg-accent/50 hover:text-accent-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -68,15 +70,15 @@ export function Sidebar() {
       {/* Bottom section - Theme Toggle above divider */}
       <div className="mt-auto">
         <ThemeToggle />
-        <div className="pt-4 border-t mt-2">
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 mt-2">
           {settingsItem && (
             <Link
               href={settingsItem.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                 pathname === settingsItem.href || pathname?.startsWith('/admin')
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-slate-700 dark:text-slate-300 hover:bg-accent/50 hover:text-accent-foreground"
               )}
             >
               <Settings className="h-5 w-5" />

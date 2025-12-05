@@ -8,26 +8,32 @@ import { StreamsChart } from "@/components/StreamsChart"
 import { ArtistComparisonChart } from "@/components/ArtistComparisonChart"
 import { TrendChart } from "@/components/TrendChart"
 import { PositionChart } from "@/components/PositionChart"
-import { DateRangePicker } from "@/components/DateRangePicker"
+import { PeriodComparisonTable } from "@/components/PeriodComparisonTable"
+import { DashboardFilters } from "@/components/DashboardFilters"
 import { fetchDashboard, fetchTracks } from "@/lib/api"
 import { format } from "date-fns"
 import type { Period } from "@/components/PeriodSelector"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState<string>("")
   const [period, setPeriod] = useState<Period>("daily")
+  const [region, setRegion] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [tracksData, setTracksData] = useState<any[]>([])
   const [selectedArtists, setSelectedArtists] = useState<string[]>([])
+  const [periodComparisonData, setPeriodComparisonData] = useState<any>(null)
+  const [loadingComparison, setLoadingComparison] = useState(false)
 
   useEffect(() => {
     async function loadData() {
       try {
         const [dashboard, tracks] = await Promise.all([
-          fetchDashboard({ date: date || undefined, period }),
-          fetchTracks({ limit: 50, date: date || undefined, period }),
+          fetchDashboard({ date: date || undefined, period, region }),
+          fetchTracks({ limit: 50, date: date || undefined, period, region }),
         ])
         setDashboardData(dashboard)
         setTracksData(tracks.tracks || [])
@@ -40,7 +46,7 @@ export default function InsightsPage() {
       }
     }
     loadData()
-  }, [date, period])
+  }, [date, period, region])
 
   // Prepare streams chart data
   const streamsChartData = tracksData
@@ -69,6 +75,30 @@ export default function InsightsPage() {
     position: artist.currentPosition || artist.bestPosition,
   }))
 
+  async function loadPeriodComparison() {
+    setLoadingComparison(true)
+    try {
+      const params = new URLSearchParams({
+        periodType: 'week',
+        chartType: period === 'daily' ? 'regional' : 'regional',
+        chartPeriod: period,
+      })
+      if (region) {
+        params.append('region', region)
+      }
+
+      const response = await fetch(`/api/charts/period-compare?${params}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPeriodComparisonData(data)
+      }
+    } catch (error) {
+      console.error('Failed to load period comparison:', error)
+    } finally {
+      setLoadingComparison(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-8">
@@ -87,19 +117,27 @@ export default function InsightsPage() {
       </div>
 
       <div className="mb-6">
-        <DateRangePicker
-          label="Date & Period Selection"
-          value={date}
-          onChange={(newDate) => setDate(newDate)}
-          availableDates={availableDates}
+        <DashboardFilters
+          date={date}
           period={period}
+          region={region}
+          availableDates={availableDates}
+          onDateChange={setDate}
           onPeriodChange={setPeriod}
+          onRegionChange={setRegion}
         />
       </div>
 
-      <div className="grid gap-6">
-        {/* Trend Analysis */}
-        <Card>
+      <Tabs defaultValue="trends" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="trends">Trends & Analytics</TabsTrigger>
+          <TabsTrigger value="comparison">Period Comparison</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="trends" className="space-y-6">
+          <div className="grid gap-6">
+            {/* Trend Analysis */}
+            <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -181,7 +219,51 @@ export default function InsightsPage() {
             </Typography>
           </CardContent>
         </Card>
-      </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="comparison" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Period Comparison</CardTitle>
+                  <CardDescription>
+                    Compare this week vs last week to see trends and changes
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={loadPeriodComparison}
+                  disabled={loadingComparison}
+                  variant="outline"
+                >
+                  {loadingComparison ? 'Loading...' : 'Load Comparison'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {periodComparisonData ? (
+                <PeriodComparisonTable
+                  period1={periodComparisonData.period1}
+                  period2={periodComparisonData.period2}
+                  positionChanges={periodComparisonData.positionChanges}
+                  biggestMovers={periodComparisonData.biggestMovers}
+                  biggestDroppers={periodComparisonData.biggestDroppers}
+                  newEntries={periodComparisonData.newEntries}
+                  exits={periodComparisonData.exits}
+                />
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Click &quot;Load Comparison&quot; to see period-over-period analysis</p>
+                  <p className="text-sm mt-2">
+                    Compare this week vs last week to identify trends, new entries, and position changes
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

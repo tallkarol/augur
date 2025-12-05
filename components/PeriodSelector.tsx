@@ -10,9 +10,11 @@ interface PeriodSelectorProps {
   value: Period
   onChange: (period: Period) => void
   className?: string
+  variant?: "default" | "compact"
 }
 
-export function PeriodSelector({ value, onChange, className }: PeriodSelectorProps) {
+export function PeriodSelector({ value, onChange, className, variant = "default" }: PeriodSelectorProps) {
+  const size = variant === "compact" ? "sm" : "sm"
   return (
     <div className={cn("flex gap-2", className)}>
       <Button

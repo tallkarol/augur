@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { format, parseISO } from 'date-fns'
 import { arrayToCSV } from '@/lib/export'
+import { getServerSettings } from '@/lib/formatUtilsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,21 +48,41 @@ export async function GET(request: NextRequest) {
       take: limit,
     })
 
-    // Format for CSV
-    const csvData = chartEntries.map((entry) => ({
+    // Get export settings
+    const settings = await getServerSettings()
+    const exportSettings = settings.export || {}
+    const includeStreams = exportSettings.includeStreams !== false
+    const includePositions = exportSettings.includePositions !== false
+    const includeLeadScores = exportSettings.includeLeadScores !== false
+
+    // Format for CSV based on settings
+    const csvData = chartEntries.map((entry) => {
+      const row: Record<string, any> = {
       Date: format(entry.date, 'yyyy-MM-dd'),
-      Position: entry.position,
       Track: entry.track.name,
       Artist: entry.track.artist.name,
       'Chart Type': entry.chartType,
       'Chart Period': entry.chartPeriod,
-      'Previous Rank': entry.previousRank || '',
-      'Peak Rank': entry.peakRank || '',
-      'Days on Chart': entry.daysOnChart || '',
-      Streams: entry.streams?.toString() || '',
-      Source: entry.source || '',
       Platform: entry.platform,
-    }))
+      }
+      
+      if (includePositions) {
+        row.Position = entry.position
+        row['Previous Rank'] = entry.previousRank || ''
+        row['Peak Rank'] = entry.peakRank || ''
+        row['Days on Chart'] = entry.daysOnChart || ''
+      }
+      
+      if (includeStreams && entry.streams) {
+        row.Streams = entry.streams.toString()
+      }
+      
+      if (entry.source) {
+        row.Source = entry.source
+      }
+      
+      return row
+    })
 
     const csv = arrayToCSV(csvData)
     const dateRange =

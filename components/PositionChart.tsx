@@ -17,11 +17,20 @@ interface PositionChartProps {
   title?: string
   series?: Array<{ name: string; dataKey: string; color?: string }>
   height?: number
+  showTooltip?: boolean
+  tooltipFormatter?: (value: any, name: string) => [string, string]
 }
 
 const defaultColors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#0088fe', '#ff00ff', '#00ffff']
 
-export function PositionChart({ data, title, series, height = 400 }: PositionChartProps) {
+export function PositionChart({ 
+  data, 
+  title, 
+  series, 
+  height = 400,
+  showTooltip = true,
+  tooltipFormatter
+}: PositionChartProps) {
   const chartData = data.map(d => ({
     ...d,
     position: d.position,
@@ -29,6 +38,10 @@ export function PositionChart({ data, title, series, height = 400 }: PositionCha
 
   // If series provided, use them; otherwise use default single series
   const chartSeries = series || [{ name: 'Chart Position', dataKey: 'position', color: defaultColors[0] }]
+
+  // Default tooltip formatter
+  const defaultTooltipFormatter = (value: number) => `#${value}`
+  const formatTooltip = tooltipFormatter || ((value: number) => [defaultTooltipFormatter(value), 'Position'])
 
   return (
     <div className="w-full" style={{ height: `${height}px` }}>
@@ -52,17 +65,24 @@ export function PositionChart({ data, title, series, height = 400 }: PositionCha
             reversed
             label={{ value: 'Position', angle: -90, position: 'insideLeft' }}
           />
-          <Tooltip 
-            formatter={(value: number) => `#${value}`}
-            labelFormatter={(value) => {
-              try {
-                const date = new Date(value)
-                return formatDate(date, 'MMM d, yyyy')
-              } catch {
-                return value
-              }
-            }}
-          />
+          {showTooltip && (
+            <Tooltip 
+              formatter={tooltipFormatter || ((value: number) => `#${value}`)}
+              labelFormatter={(value) => {
+                try {
+                  const date = new Date(value)
+                  return formatDate(date, 'MMM d, yyyy')
+                } catch {
+                  return value
+                }
+              }}
+              contentStyle={{
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+              }}
+            />
+          )}
           <Legend />
           {chartSeries.map((s, index) => (
             <Line 

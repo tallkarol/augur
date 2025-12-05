@@ -139,7 +139,7 @@ export async function fetchViral50Chart(
             if (match && match.id) {
               console.log(`[SpotifyPlaylists] Found playlist via search: ${match.name} (ID: ${match.id})`)
               playlistId = match.id
-              playlist = await spotifyClient.getPlaylist(playlistId, 'US')
+              playlist = await spotifyClient.getPlaylist(playlistId as string, 'US')
             } else {
               throw new Error(`Search found playlists but none matched "Viral 50" for region ${region}. Please verify the playlist ID in settings.`)
             }
@@ -165,7 +165,8 @@ export async function fetchViral50Chart(
     // Get all tracks from playlist
     console.log(`[SpotifyPlaylists] Fetching playlist tracks...`)
     // Use 'US' market - required for Client Credentials flow
-    const tracks = await spotifyClient.getAllPlaylistTracks(playlistId, 'US')
+    // playlistId is guaranteed to be non-null here due to checks above
+    const tracks = await spotifyClient.getAllPlaylistTracks(playlistId as string, 'US')
     console.log(`[SpotifyPlaylists] Fetched ${tracks.length} tracks`)
 
     // Process tracks into chart data format

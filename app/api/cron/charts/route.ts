@@ -6,6 +6,7 @@ import { processChartData } from '@/lib/chartProcessor'
 import { fetchViral50Chart, processPlaylistChart } from '@/lib/spotifyPlaylists'
 import { getDefaultDeduplicationAction, handleDuplicates, checkDuplicates } from '@/lib/deduplication'
 import { format, subDays } from 'date-fns'
+import { normalizeRegion } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   return handleCron(request)
@@ -87,22 +88,25 @@ async function handleCron(request: NextRequest) {
           console.log(`[Cron] Fetching Viral 50 playlist for region: ${region}`)
           
           const chartData = await fetchViral50Chart(region, fetchDate)
+          const normalizedRegion = normalizeRegion(region)
           const dedupAction = await getDefaultDeduplicationAction('playlist')
           
           const duplicateCheck = await checkDuplicates(
             fetchDate,
             'viral',
             'daily',
-            region === 'global' ? null : region
+            normalizedRegion
           )
 
           if (duplicateCheck.exists) {
+            // Map 'show-warning' to 'replace' for API calls (show-warning is for UI)
+            const actionForHandle = dedupAction === 'show-warning' ? 'replace' : dedupAction
             const handleResult = await handleDuplicates(
               fetchDate,
               'viral',
               'daily',
-              region === 'global' ? null : region,
-              dedupAction
+              normalizedRegion,
+              actionForHandle as 'skip' | 'update' | 'replace'
             )
 
             if (handleResult.skipped) {
@@ -167,7 +171,9 @@ async function handleCron(request: NextRequest) {
           const duplicateCheck = await checkDuplicates(chartDate, chartType, chartPeriod, null)
 
           if (duplicateCheck.exists) {
-            const handleResult = await handleDuplicates(chartDate, chartType, chartPeriod, null, dedupAction)
+            // Map 'show-warning' to 'replace' for API calls (show-warning is for UI)
+            const actionForHandle = dedupAction === 'show-warning' ? 'replace' : dedupAction
+            const handleResult = await handleDuplicates(chartDate, chartType, chartPeriod, null, actionForHandle as 'skip' | 'update' | 'replace')
             if (handleResult.skipped) {
               console.log('[Cron] Skipped duplicate weekly chart data')
               results.weekly.processed = true

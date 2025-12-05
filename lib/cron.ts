@@ -15,7 +15,7 @@ import cron from 'node-cron'
  * Examples:
  * - '0 2 * * *' - Every day at 2 AM
  * - '0 2 * * 1' - Every Monday at 2 AM
- * - '0 */6 * * *' - Every 6 hours
+ * - Every 6 hours: use pattern with asterisk-slash-6 in the hours field
  */
 export function startChartCronJob(schedule: string = '0 2 * * *') {
   console.log(`[Cron] Starting chart fetch cron job with schedule: ${schedule}`)

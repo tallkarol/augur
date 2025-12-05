@@ -227,6 +227,43 @@ class SpotifyClient {
   }
 
   /**
+   * Get artist's top tracks from Spotify
+   */
+  async getArtistTopTracks(spotifyArtistId: string, market: string = 'US'): Promise<SpotifyTrack[]> {
+    try {
+      if (!this.clientId || !this.clientSecret) {
+        throw new Error('Spotify credentials not configured')
+      }
+      const response = await this.request<{ tracks: SpotifyTrack[] }>(
+        `/artists/${spotifyArtistId}/top-tracks?market=${market}`
+      )
+      return response.tracks || []
+    } catch (error) {
+      console.error(`Error getting top tracks for artist ${spotifyArtistId}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * Search for multiple artists (returns more results)
+   */
+  async searchArtists(query: string, limit: number = 20): Promise<SpotifyArtist[]> {
+    try {
+      if (!this.clientId || !this.clientSecret) {
+        throw new Error('Spotify credentials not configured')
+      }
+      const encodedQuery = encodeURIComponent(query)
+      const response: SpotifySearchResponse = await this.request(
+        `/search?q=${encodedQuery}&type=artist&limit=${limit}`
+      )
+      return response.artists?.items || []
+    } catch (error) {
+      console.error(`Error searching for artists "${query}":`, error)
+      throw error
+    }
+  }
+
+  /**
    * Extract Spotify ID from URI
    */
   extractIdFromUri(uri: string): string | null {
@@ -255,7 +292,7 @@ class SpotifyClient {
         console.log(`[SpotifyClient] First result: ${playlists[0].name || 'Unknown'} (ID: ${playlists[0].id || 'N/A'})`)
       }
       
-      return playlists.filter(p => p !== null && p !== undefined)
+      return playlists.filter((p: any) => p !== null && p !== undefined)
     } catch (error) {
       console.error(`[SpotifyClient] Error searching playlists:`, error)
       throw error
@@ -278,7 +315,7 @@ class SpotifyClient {
       // Add market parameter - required for Client Credentials flow
       // According to Spotify docs: "If neither market or user country are provided, 
       // the content is considered unavailable for the client."
-      const playlist = await this.request(`/playlists/${playlistId}?market=${market}`)
+      const playlist = await this.request<any>(`/playlists/${playlistId}?market=${market}`)
       console.log(`[SpotifyClient] Successfully fetched playlist: ${playlist.name}`)
       return playlist
     } catch (error: any) {
@@ -357,7 +394,7 @@ class SpotifyClient {
       try {
         const response = await this.getPlaylistTracks(playlistId, limit, offset, market)
         
-        response.items.forEach((item, index) => {
+        response.items.forEach((item: any, index: number) => {
           allTracks.push({
             ...item,
             position: offset + index + 1,

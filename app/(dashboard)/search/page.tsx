@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Typography } from "@/components/typography"
 import { TrackModal } from "@/components/TrackModal"
+import { TrackArtistButton } from "@/components/TrackArtistButton"
 import { Search, Users, Music, Loader2, TrendingUp } from "lucide-react"
 import Link from "next/link"
 
@@ -93,8 +94,7 @@ export default function SearchPage() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                     {results.artists.map((artist) => (
-                      <Link key={artist.id} href={`/artists/${artist.id}`}>
-                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                      <Card key={artist.id} className="hover:bg-muted/50 transition-colors h-full">
                           <CardContent className="p-4">
                             <div className="flex items-start gap-3">
                               {artist.imageUrl && (
@@ -105,7 +105,9 @@ export default function SearchPage() {
                                 />
                               )}
                               <div className="flex-1 min-w-0">
+                              <Link href={`/artists/${artist.id}`} className="hover:underline">
                                 <div className="font-semibold truncate">{artist.name}</div>
+                              </Link>
                                 {artist.genres && artist.genres.length > 0 && (
                                   <div className="text-xs text-muted-foreground truncate mt-1">
                                     {artist.genres.slice(0, 2).join(', ')}
@@ -119,11 +121,18 @@ export default function SearchPage() {
                                     </span>
                                   </div>
                                 )}
+                              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                                <TrackArtistButton
+                                  artistId={artist.id}
+                                  artistName={artist.name}
+                                  variant="outline"
+                                  size="sm"
+                                />
+                              </div>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
-                      </Link>
                     ))}
                   </div>
                 </div>
@@ -183,7 +192,7 @@ export default function SearchPage() {
               <CardContent className="py-12">
                 <div className="text-center text-muted-foreground">
                   <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No results found for "{debouncedQuery}"</p>
+                  <p>No results found for &quot;{debouncedQuery}&quot;</p>
                   <p className="text-sm mt-2">Try a different search term</p>
                 </div>
               </CardContent>

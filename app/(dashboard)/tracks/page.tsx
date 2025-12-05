@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Typography } from "@/components/typography"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -13,9 +14,9 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { DateRangePicker } from "@/components/DateRangePicker"
+import { DashboardFilters } from "@/components/DashboardFilters"
 import { ExportButton } from "@/components/ExportButton"
-import { ChartFilters } from "@/components/ChartFilters"
+import { Pagination } from "@/components/Pagination"
 import { SpotifyWidget } from "@/components/SpotifyWidget"
 import { TrackModal } from "@/components/TrackModal"
 import { ExternalLink } from "lucide-react"
@@ -30,19 +31,23 @@ export default function TracksPage() {
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState<string>("")
   const [period, setPeriod] = useState<Period>("daily")
-  const [chartType, setChartType] = useState<'regional' | 'viral'>('regional')
+  const [chartType, setChartType] = useState<'regional' | 'viral'>('viral')
   const [region, setRegion] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [limit, setLimit] = useState(100)
+  const [limit, setLimit] = useState(20) // Will be updated from settings
+  const [currentPage, setCurrentPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadTracks() {
       setLoading(true)
       try {
+        const offset = (currentPage - 1) * limit
         const data = await fetchTracks({ 
           limit, 
+          offset,
           date: date || undefined, 
           period,
           chartType,
@@ -50,6 +55,7 @@ export default function TracksPage() {
         })
         setTracks(data.tracks || [])
         setFilteredTracks(data.tracks || [])
+        setTotal(data.total || 0)
         if (data.date) setDate(data.date)
         if (data.availableDates) setAvailableDates(data.availableDates)
       } catch (error) {
@@ -59,10 +65,11 @@ export default function TracksPage() {
       }
     }
     loadTracks()
-  }, [date, limit, period, chartType, region])
+  }, [date, limit, currentPage, period, chartType, region])
 
   useEffect(() => {
     if (searchQuery) {
+      setCurrentPage(1)
       const filtered = tracks.filter(track =>
         track.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         track.artist.toLowerCase().includes(searchQuery.toLowerCase())
@@ -73,6 +80,11 @@ export default function TracksPage() {
     }
   }, [searchQuery, tracks])
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [date, period, chartType, region])
+
 
   if (loading) {
     return (
@@ -82,41 +94,51 @@ export default function TracksPage() {
     )
   }
 
+  const getChartTypeLabel = () => {
+    if (chartType === 'viral') return 'Viral 50'
+    if (chartType === 'regional') return 'Top 50'
+    return 'Blended (Viral + Top 50)'
+  }
+
   return (
-    <div className="p-8">
-      <div className="mb-8">
+    <div className="p-8 space-y-8">
+      {/* Header Section */}
+      <div className="space-y-4">
+        <div>
         <Typography variant="h1">Trending Tracks</Typography>
         <Typography variant="subtitle" className="mt-2">
           {date && `Data as of ${format(new Date(date), 'MMMM d, yyyy')} (${period})`}
-          {chartType === 'viral' && ' - Viral 50'}
-          {chartType === 'regional' && ' - Top 50'}
-          {region && ` - ${region}`}
+            {region && ` • ${region}`}
         </Typography>
       </div>
 
-      <div className="mb-6">
-        <DateRangePicker
-          label="Date & Period Selection"
-          value={date}
-          onChange={(newDate) => setDate(newDate)}
-          availableDates={availableDates}
-          period={period}
-          onPeriodChange={setPeriod}
-        />
-      </div>
+        {/* Chart Type Tabs */}
+        <Tabs value={chartType === 'regional' ? 'top' : chartType} onValueChange={(value) => {
+          if (value === 'top') {
+            setChartType('regional')
+          } else {
+            setChartType(value as 'regional' | 'viral')
+          }
+        }} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="viral">VIRAL</TabsTrigger>
+            <TabsTrigger value="top">TOP</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      <div className="mb-6">
-        <ChartFilters
-          chartType={chartType}
-          chartPeriod={period}
+        {/* Combined Filters */}
+        <DashboardFilters
+          date={date}
+          period={period}
           region={region}
-          onChartTypeChange={setChartType}
-          onChartPeriodChange={setPeriod}
+          availableDates={availableDates}
+          onDateChange={setDate}
+          onPeriodChange={setPeriod}
           onRegionChange={setRegion}
         />
-      </div>
 
-      <div className="mb-6 flex gap-4 flex-wrap">
+        {/* Search and Limit */}
+        <div className="flex gap-4 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <Label>Search</Label>
           <div className="relative">
@@ -129,7 +151,7 @@ export default function TracksPage() {
             />
           </div>
         </div>
-        <div className="flex-1 min-w-[150px]">
+          <div className="min-w-[150px]">
           <Label>Limit</Label>
           <Input
             type="number"
@@ -138,6 +160,7 @@ export default function TracksPage() {
             min={10}
             max={200}
           />
+          </div>
         </div>
       </div>
 
@@ -266,6 +289,15 @@ export default function TracksPage() {
             </TableBody>
           </Table>
         </CardContent>
+        {!searchQuery && total > limit && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(total / limit)}
+            onPageChange={setCurrentPage}
+            pageSize={limit}
+            total={total}
+          />
+        )}
       </Card>
 
       <TrackModal

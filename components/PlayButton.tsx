@@ -221,12 +221,15 @@ export function PlayButton({
     })
   }, [trackName, previewUrl, isPlaying, isLoading])
 
+  // Map "md" to "default" for Button component
+  const buttonSize = size === "md" ? "default" : size
+
   if (!previewUrl) {
     console.log('[PlayButton] Rendering disabled button (no previewUrl)', { trackName })
     return (
       <Button
         variant={variant}
-        size={size}
+        size={buttonSize}
         disabled
         className={cn("opacity-50 cursor-not-allowed", className)}
         title="Preview not available"
@@ -252,7 +255,7 @@ export function PlayButton({
     <>
       <Button
         variant={variant}
-        size={size}
+        size={buttonSize}
         onClick={handlePlay}
         disabled={isLoading}
         className={cn(sizeClasses[size], className)}

@@ -4,6 +4,7 @@ import { processChartData } from '@/lib/chartProcessor'
 import { checkDuplicates, getDefaultDeduplicationAction } from '@/lib/deduplication'
 import { supabase } from '@/lib/supabase'
 import { parseISO } from 'date-fns'
+import { normalizeRegion, getRegionType } from '@/lib/utils'
 
 // Increase timeout for large file uploads (max 300 seconds for Vercel Pro)
 export const maxDuration = 300
@@ -75,8 +76,36 @@ export async function POST(request: NextRequest) {
           continue
         }
 
+        // Normalize region
+        const normalizedRegion = normalizeRegion(region)
+        const regionType = getRegionType(region)
+
         // Check for duplicates
-        const duplicateCheck = await checkDuplicates(date, chartType, chartPeriod, region === 'global' ? null : region)
+        const duplicateCheck = await checkDuplicates(date, chartType, chartPeriod, normalizedRegion)
+
+        // Get sample of existing entries to show what will be overwritten
+        let existingEntriesSample: any[] = []
+        if (duplicateCheck.exists) {
+          const chartDate = parseISO(date)
+          let sampleQuery = supabase
+            .from('chart_entries')
+            .select('id, position, tracks(name), artists(name)')
+            .eq('date', chartDate.toISOString())
+            .eq('chartType', chartType)
+            .eq('chartPeriod', chartPeriod)
+            .eq('platform', 'spotify')
+            .limit(10)
+            .order('position', { ascending: true })
+
+          if (normalizedRegion === null || normalizedRegion === undefined) {
+            sampleQuery = sampleQuery.is('region', null)
+          } else {
+            sampleQuery = sampleQuery.eq('region', normalizedRegion)
+          }
+
+          const { data: sample } = await sampleQuery
+          existingEntriesSample = sample || []
+        }
 
         // Determine action
         let action = deduplicationAction
@@ -90,10 +119,15 @@ export async function POST(request: NextRequest) {
               date,
               chartType,
               chartPeriod,
-              region: region === 'global' ? null : region,
+              region: normalizedRegion,
               existingEntryCount: duplicateCheck.existingEntryCount,
+              sampleEntries: existingEntriesSample.map(e => ({
+                position: e.position,
+                trackName: e.tracks?.name || 'Unknown',
+                artistName: e.artists?.name || 'Unknown',
+              })),
             },
-            error: `Duplicate entries found. ${duplicateCheck.existingEntryCount} existing entries for this date/chart combination.`,
+            error: `Duplicate entries found. ${duplicateCheck.existingEntryCount} existing entries for this date/chart combination will be overwritten if you proceed.`,
           })
           continue
         }
@@ -103,10 +137,6 @@ export async function POST(request: NextRequest) {
           // This will be handled by the deduplication system
           // For now, proceed with processing
         }
-
-        // Determine region type (heuristic: if region is a known country code or 'global', it's country/global)
-        const regionType = region === 'global' ? null : (region.length === 2 ? 'country' : 'city')
-        const normalizedRegion = region === 'global' ? null : region
 
         // Create CsvUpload record
         uploadId = crypto.randomUUID()
@@ -140,7 +170,8 @@ export async function POST(request: NextRequest) {
         const processResult = await processChartData(
           parsedData,
           normalizedRegion || undefined,
-          regionType || undefined
+          regionType || undefined,
+          uploadId
         )
         console.log(`[CSVUpload] Completed processing for ${file.name}:`, {
           artists: processResult.artistsCreated + processResult.artistsUpdated,
@@ -153,6 +184,12 @@ export async function POST(request: NextRequest) {
         const hasSuccess = processResult.entriesCreated > 0 || processResult.entriesUpdated > 0
         const finalStatus = hasErrors && hasSuccess ? 'partial' : (hasErrors ? 'failed' : 'success')
         const errorMessage = hasErrors ? processResult.errors.join('; ') : null
+
+        // Invalidate cache if we successfully created/updated entries
+        if (hasSuccess) {
+          const { invalidateAvailableDatesCache } = await import('@/lib/serverUtils')
+          invalidateAvailableDatesCache()
+        }
 
         // Update CsvUpload record with results
         const { error: uploadUpdateError } = await supabase
@@ -184,15 +221,18 @@ export async function POST(request: NextRequest) {
         
         // Try to update upload record if it was created
         if (uploadId) {
-          await supabase
-            .from('csv_uploads')
-            .update({
-              status: 'failed',
-              error: errorMessage,
-              completedAt: new Date().toISOString(),
-            })
-            .eq('id', uploadId)
-            .catch((err) => console.error('[CSVUpload] Failed to update failed upload record:', err))
+          try {
+            await supabase
+              .from('csv_uploads')
+              .update({
+                status: 'failed',
+                error: errorMessage,
+                completedAt: new Date().toISOString(),
+              })
+              .eq('id', uploadId)
+          } catch (err) {
+            console.error('[CSVUpload] Failed to update failed upload record:', err)
+          }
         }
         
         results.push({

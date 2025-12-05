@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { AVAILABLE_REGIONS } from "@/lib/spotifyCharts"
+import { AVAILABLE_REGIONS, US_CITIES, OTHER_COUNTRIES } from "@/lib/spotifyCharts"
 import { useState, useEffect } from "react"
 import { Calendar as CalendarIcon, Globe } from "lucide-react"
 
@@ -39,42 +39,64 @@ export function DashboardFilters({
   useEffect(() => {
     if (quickSelect) {
       const today = new Date()
-      let selectedDate: Date
+      let targetDate: Date
 
       switch (quickSelect) {
         case "today":
-          selectedDate = today
+          targetDate = today
           break
         case "yesterday":
-          selectedDate = subDays(today, 1)
+          targetDate = subDays(today, 1)
           break
         case "last7":
-          selectedDate = subDays(today, 7)
+          targetDate = subDays(today, 7)
           break
         case "last30":
-          selectedDate = subDays(today, 30)
+          targetDate = subDays(today, 30)
           break
         case "thisWeek":
-          selectedDate = startOfWeek(today)
+          targetDate = startOfWeek(today)
           break
         case "lastWeek":
-          selectedDate = startOfWeek(subWeeks(today, 1))
+          targetDate = startOfWeek(subWeeks(today, 1))
           break
         case "thisMonth":
-          selectedDate = startOfMonth(today)
+          targetDate = startOfMonth(today)
           break
         case "lastMonth":
-          selectedDate = startOfMonth(subMonths(today, 1))
+          targetDate = startOfMonth(subMonths(today, 1))
           break
         default:
           return
       }
 
-      const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      onDateChange(dateStr)
+      // Find the closest available date (prefer dates <= target, otherwise closest after)
+      const targetDateStr = format(targetDate, 'yyyy-MM-dd')
+      let selectedDateStr: string | null = null
+
+      if (availableDates && availableDates.length > 0) {
+        // Sort dates to find the closest one
+        const sortedDates = [...availableDates].sort()
+        
+        // Find the most recent date that's <= target date
+        const datesBeforeOrEqual = sortedDates.filter(d => d <= targetDateStr)
+        if (datesBeforeOrEqual.length > 0) {
+          selectedDateStr = datesBeforeOrEqual[datesBeforeOrEqual.length - 1]
+        } else {
+          // If no dates before target, use the earliest available date
+          selectedDateStr = sortedDates[0]
+        }
+      } else {
+        // Fallback to the calculated date if no available dates
+        selectedDateStr = targetDateStr
+      }
+
+      if (selectedDateStr) {
+        onDateChange(selectedDateStr)
+      }
       setQuickSelect("")
     }
-  }, [quickSelect, onDateChange])
+  }, [quickSelect, onDateChange, availableDates])
 
   return (
     <div className="space-y-4">
@@ -82,7 +104,7 @@ export function DashboardFilters({
       <div className="flex items-end gap-4">
         <div className="flex-1 min-w-[200px]">
           <Label className="text-xs text-muted-foreground mb-2 block">Date</Label>
-          <Select value={date} onValueChange={onDateChange}>
+          <Select value={date || undefined} onValueChange={onDateChange}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a date" />
             </SelectTrigger>
@@ -94,7 +116,7 @@ export function DashboardFilters({
                   </SelectItem>
                 ))
               ) : (
-                <SelectItem value={date || ''} disabled>
+                <SelectItem value="no-dates" disabled>
                   No dates available
                 </SelectItem>
               )}
@@ -194,56 +216,56 @@ export function DashboardFilters({
             )}
           </div>
         </div>
-        <div className="min-w-[200px]">
-          <Label className="text-xs text-muted-foreground mb-2 block">Region</Label>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={region === null ? "default" : "outline"}
-              size="sm"
-              onClick={() => onRegionChange(null)}
-              className="flex items-center gap-2 h-8 text-xs"
+        <div className="flex gap-4">
+          <div className="min-w-[180px]">
+            <Label className="text-xs text-muted-foreground mb-2 block">US Cities</Label>
+            <Select
+              value={
+                region === 'us' || (region && US_CITIES.some(c => c.code === region))
+                  ? region || 'us'
+                  : 'us'
+              }
+              onValueChange={(value) => {
+                onRegionChange(value)
+              }}
             >
-              <Globe className="h-3 w-3" />
-              Global
-            </Button>
-            {Object.entries(AVAILABLE_REGIONS)
-              .filter(([code]) => code !== 'global')
-              .slice(0, 5)
-              .map(([code, info]) => (
-                <Button
-                  key={code}
-                  type="button"
-                  variant={region === code ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onRegionChange(code)}
-                  className="h-8 text-xs"
-                >
-                  {info.name}
-                </Button>
-              ))}
-            {Object.entries(AVAILABLE_REGIONS).filter(([code]) => code !== 'global').length > 5 && (
-              <Select
-                value={region || ''}
-                onValueChange={(value) => onRegionChange(value === 'global' || !value ? null : value)}
-              >
-                <SelectTrigger className="h-8 w-[120px] text-xs">
-                  <SelectValue placeholder="More..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AVAILABLE_REGIONS)
-                    .filter(([code]) => {
-                      const top5Codes = Object.keys(AVAILABLE_REGIONS).filter((c) => c !== 'global').slice(0, 5)
-                      return code !== 'global' && !top5Codes.includes(code)
-                    })
-                    .map(([code, info]) => (
-                      <SelectItem key={code} value={code}>
-                        {info.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            )}
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="United States" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="us">United States</SelectItem>
+                {US_CITIES.map(({ code, name }) => (
+                  <SelectItem key={code} value={code}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[180px]">
+            <Label className="text-xs text-muted-foreground mb-2 block">Other Countries</Label>
+            <Select
+              value={
+                region === null || (region && OTHER_COUNTRIES.some(c => c.code === region))
+                  ? region === null ? 'global' : region
+                  : undefined
+              }
+              onValueChange={(value) => {
+                onRegionChange(value === 'global' ? null : value)
+              }}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select country..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                <SelectItem value="global">Global</SelectItem>
+                {OTHER_COUNTRIES.map(({ code, name }) => (
+                  <SelectItem key={code} value={code}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

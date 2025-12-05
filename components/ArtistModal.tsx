@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button"
 import { PositionChart } from "@/components/PositionChart"
 import { StreamsChart } from "@/components/StreamsChart"
 import { Typography } from "@/components/typography"
+import { TrackArtistButton } from "@/components/TrackArtistButton"
 import { Loader2, Music, TrendingUp, Users, ExternalLink } from "lucide-react"
 import { format } from "date-fns"
 import { SpotifyWidget } from "@/components/SpotifyWidget"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 interface ArtistModalProps {
   artistId: string | null
@@ -40,6 +42,7 @@ export function ArtistModal({
   const [tracks, setTracks] = useState<any[]>([])
   const [chartHistory, setChartHistory] = useState<any[]>([])
   const [stats, setStats] = useState<any>(null)
+  const [selectedPeriod, setSelectedPeriod] = useState<'last30Days' | 'thisYear'>('last30Days')
 
   useEffect(() => {
     if (open && artistId) {
@@ -123,12 +126,20 @@ export function ArtistModal({
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <DialogTitle className="text-2xl">{artist.name}</DialogTitle>
+                    <div className="flex items-center gap-2">
+                      <TrackArtistButton
+                        artistId={artist.id}
+                        artistName={artist.name}
+                        variant="outline"
+                        size="sm"
+                      />
                     <Link href={`/artists/${artist.id}`}>
                       <Button variant="outline" size="sm" className="gap-2">
                         <ExternalLink className="h-4 w-4" />
                         View Full Profile
                       </Button>
                     </Link>
+                    </div>
                   </div>
                   <DialogDescription>
                     {artist.genres && artist.genres.length > 0 ? (
@@ -158,8 +169,83 @@ export function ArtistModal({
         ) : artist ? (
           <>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Period Selector */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={selectedPeriod === 'last30Days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPeriod('last30Days')}
+                className="text-xs"
+              >
+                LAST 30 DAYS
+              </Button>
+              <Button
+                variant={selectedPeriod === 'thisYear' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPeriod('thisYear')}
+                className="text-xs"
+              >
+                THIS YEAR
+              </Button>
+            </div>
+
+            {/* Period-Specific Stats */}
+            {stats && (stats.last30Days || stats.thisYear) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Highest Position</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days' 
+                        ? (stats.last30Days?.highestPosition ? `#${stats.last30Days.highestPosition}` : 'N/A')
+                        : (stats.thisYear?.highestPosition ? `#${stats.thisYear.highestPosition}` : 'N/A')}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Avg Position</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.averagePosition ? `#${stats.last30Days.averagePosition.toFixed(1)}` : 'N/A')
+                        : (stats.thisYear?.averagePosition ? `#${stats.thisYear.averagePosition.toFixed(1)}` : 'N/A')}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Days in Top 10</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.daysInTop10 ?? 0)
+                        : (stats.thisYear?.daysInTop10 ?? 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Days in Top 20</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {selectedPeriod === 'last30Days'
+                        ? (stats.last30Days?.daysInTop20 ?? 0)
+                        : (stats.thisYear?.daysInTop20 ?? 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Legacy Stats Grid (fallback) */}
+            {stats && !stats.last30Days && !stats.thisYear && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Best Position</CardDescription>
@@ -187,7 +273,7 @@ export function ArtistModal({
                 <CardContent>
                   <div className="text-2xl font-bold">
                     {stats?.totalStreams 
-                      ? `${(stats.totalStreams / 1000000).toFixed(1)}M`
+                      ? `${(parseInt(stats.totalStreams) / 1000000).toFixed(1)}M`
                       : 'N/A'}
                   </div>
                 </CardContent>
@@ -203,6 +289,51 @@ export function ArtistModal({
                 </CardContent>
               </Card>
             </div>
+            )}
+
+            {/* Dashboard Metrics */}
+            {stats?.aggregateLeadScore !== undefined && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Performance Metrics</CardTitle>
+                  <CardDescription>Dashboard-style analytics</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Aggregate Lead Score</div>
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {stats.aggregateLeadScore}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Combined score across all tracks
+                      </div>
+                    </div>
+                    {stats.topTrackLeadScore && (
+                      <>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Top Track</div>
+                          <div className="text-lg font-semibold truncate">
+                            {stats.topTrackLeadScore.trackName}
+                          </div>
+                          <div className="text-sm text-yellow-600 font-medium">
+                            Score: {stats.topTrackLeadScore.score}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Top Track Stats</div>
+                          <div className="text-xs space-y-1 mt-1">
+                            <div>{stats.topTrackLeadScore.breakdown.daysInTop10} days in top 10</div>
+                            <div>{stats.topTrackLeadScore.breakdown.daysInTop20} days in top 20</div>
+                            <div>Best: #{stats.topTrackLeadScore.breakdown.bestPosition}</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Charts */}
             {chartHistory.length > 0 && (
@@ -245,12 +376,17 @@ export function ArtistModal({
               <Card>
                 <CardHeader>
                   <CardTitle>Top Tracks</CardTitle>
-                  <CardDescription>{tracks.length} tracks by {artist.name}</CardDescription>
+                  <CardDescription>
+                    {chartHistory.length > 0 
+                      ? `${tracks.length} charting tracks by ${artist.name}`
+                      : `${tracks.length} top tracks by ${artist.name} (from Spotify)`
+                    }
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {tracks.slice(0, 10).map((track, index) => (
-                      <div key={track.id}>
+                      <div key={track.id || track.externalId || index}>
                         <div className="flex items-center gap-3 p-2 rounded hover:bg-muted/50">
                           <span className="text-muted-foreground w-6">{index + 1}</span>
                           {track.imageUrl && (
@@ -274,10 +410,10 @@ export function ArtistModal({
                             )}
                           </div>
                         </div>
-                        {track.externalId && (
+                        {(track.externalId || track.id) && (
                           <div className="mt-2 ml-11">
                             <SpotifyWidget
-                              spotifyTrackId={track.externalId}
+                              spotifyTrackId={track.externalId || track.id}
                               trackName={track.name}
                               height={80}
                               compact={true}

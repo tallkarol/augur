@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { format, parseISO } from 'date-fns'
 import { arrayToCSV } from '@/lib/export'
+import { getServerSettings } from '@/lib/formatUtilsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,24 +73,41 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Get export settings
+    const settings = await getServerSettings()
+    const exportSettings = settings.export || {}
+    const includeStreams = exportSettings.includeStreams !== false
+    const includePositions = exportSettings.includePositions !== false
+
     // Convert to array and format for CSV
     const csvData = Array.from(trackMap.values())
-      .map((data) => ({
-        Position: data.currentPosition,
+      .map((data) => {
+        const row: Record<string, any> = {
         Track: data.track.name,
         Artist: data.artist.name,
-        'Best Position': data.bestPosition,
-        'Previous Position': data.previousPosition || '',
-        Change: data.previousPosition
+        }
+
+        if (includePositions) {
+          row.Position = data.currentPosition
+          row['Best Position'] = data.bestPosition
+          row['Previous Position'] = data.previousPosition || ''
+          row.Change = data.previousPosition
           ? data.previousPosition - data.currentPosition
-          : '',
-        'Days on Chart': data.daysOnChart || '',
-        Streams: data.streams?.toString() || '',
-        Album: data.track.albumName || '',
-        Duration: data.track.duration ? `${Math.round(data.track.duration / 1000)}s` : '',
-        Popularity: data.track.popularity || '',
-      }))
-      .sort((a, b) => a.Position - b.Position)
+            : ''
+          row['Days on Chart'] = data.daysOnChart || ''
+        }
+
+        if (includeStreams && data.streams) {
+          row.Streams = data.streams.toString()
+        }
+
+        row.Album = data.track.albumName || ''
+        row.Duration = data.track.duration ? `${Math.round(data.track.duration / 1000)}s` : ''
+        row.Popularity = data.track.popularity || ''
+
+        return row
+      })
+      .sort((a, b) => (a.Position || 999) - (b.Position || 999))
       .slice(0, limit)
 
     const csv = arrayToCSV(csvData)

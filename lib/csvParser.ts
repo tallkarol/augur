@@ -5,6 +5,7 @@
  * Also includes JSON API response parser
  */
 
+import { parse } from 'csv-parse/sync'
 import { SpotifyChartResponse } from './spotifyCharts'
 
 export interface ParsedChartRow {
@@ -35,78 +36,83 @@ export function parseChartCSV(
   chartPeriod: 'daily' | 'weekly',
   date: string
 ): ParsedChartData {
-  const lines = csvText.trim().split('\n')
-  
-  if (lines.length < 2) {
-    throw new Error('CSV file must have at least a header and one data row')
-  }
-
-  // Parse header
-  const header = parseCSVLine(lines[0])
   const expectedHeaders = chartType === 'regional' 
     ? ['rank', 'uri', 'artist_names', 'track_name', 'source', 'peak_rank', 'previous_rank', 'days_on_chart', 'streams']
     : ['rank', 'uri', 'artist_names', 'track_name', 'source', 'peak_rank', 'previous_rank', 'days_on_chart']
 
+  // Parse CSV using csv-parse library
+  const records = parse(csvText, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    relax_quotes: true,
+    relax_column_count: true,
+  }) as Record<string, string>[]
+
+  if (!records || records.length === 0) {
+    throw new Error('CSV file must have at least a header and one data row')
+  }
+
   // Validate headers
-  const normalizedHeaders = header.map(h => h.toLowerCase().trim())
-  const hasRequiredHeaders = expectedHeaders.every(h => normalizedHeaders.includes(h))
+  const headerKeys = Object.keys(records[0]).map(h => h.toLowerCase().trim())
+  const hasRequiredHeaders = expectedHeaders.every(h => headerKeys.includes(h))
   
   if (!hasRequiredHeaders) {
     throw new Error(`CSV headers don't match expected format. Expected: ${expectedHeaders.join(', ')}`)
   }
 
-  // Create column index map
-  const columnMap: Record<string, number> = {}
-  header.forEach((col, index) => {
-    columnMap[col.toLowerCase().trim()] = index
-  })
-
   // Parse data rows
   const rows: ParsedChartRow[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue // Skip empty lines
-
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i]
+    
     try {
-      const values = parseCSVLine(line)
-      
       const row: ParsedChartRow = {
-        rank: parseInt(values[columnMap['rank']] || '0', 10),
-        uri: values[columnMap['uri']]?.replace(/^"|"$/g, '') || '', // Remove quotes
-        artistNames: values[columnMap['artist_names']]?.replace(/^"|"$/g, '') || '',
-        trackName: values[columnMap['track_name']]?.replace(/^"|"$/g, '') || '',
+        rank: parseInt(record['rank'] || '0', 10),
+        uri: (record['uri'] || '').trim(),
+        artistNames: (record['artist_names'] || '').trim(),
+        trackName: (record['track_name'] || '').trim(),
       }
 
       // Optional fields
-      if (columnMap['source'] !== undefined) {
-        row.source = values[columnMap['source']]?.replace(/^"|"$/g, '') || undefined
+      if (record['source']) {
+        row.source = record['source'].trim() || undefined
       }
       
-      if (columnMap['peak_rank'] !== undefined && values[columnMap['peak_rank']]) {
-        row.peakRank = parseInt(values[columnMap['peak_rank']], 10) || undefined
+      if (record['peak_rank'] && record['peak_rank'].trim()) {
+        const peakRank = parseInt(record['peak_rank'], 10)
+        if (!isNaN(peakRank)) {
+          row.peakRank = peakRank
+        }
       }
       
-      if (columnMap['previous_rank'] !== undefined && values[columnMap['previous_rank']]) {
-        row.previousRank = parseInt(values[columnMap['previous_rank']], 10) || undefined
+      if (record['previous_rank'] && record['previous_rank'].trim()) {
+        const previousRank = parseInt(record['previous_rank'], 10)
+        if (!isNaN(previousRank)) {
+          row.previousRank = previousRank
+        }
       }
       
-      if (columnMap['days_on_chart'] !== undefined && values[columnMap['days_on_chart']]) {
-        row.daysOnChart = parseInt(values[columnMap['days_on_chart']], 10) || undefined
+      if (record['days_on_chart'] && record['days_on_chart'].trim()) {
+        const daysOnChart = parseInt(record['days_on_chart'], 10)
+        if (!isNaN(daysOnChart)) {
+          row.daysOnChart = daysOnChart
+        }
       }
       
-      if (columnMap['streams'] !== undefined && values[columnMap['streams']]) {
-        row.streams = values[columnMap['streams']]?.replace(/^"|"$/g, '') || undefined
+      if (record['streams'] && record['streams'].trim()) {
+        row.streams = record['streams'].trim()
       }
 
       // Validate required fields
       if (!row.uri || !row.artistNames || !row.trackName || !row.rank) {
-        console.warn(`[CSVParser] Skipping invalid row ${i}:`, row)
+        console.warn(`[CSVParser] Skipping invalid row ${i + 1}:`, row)
         continue
       }
 
       rows.push(row)
     } catch (error) {
-      console.warn(`[CSVParser] Error parsing row ${i}:`, error)
+      console.warn(`[CSVParser] Error parsing row ${i + 1}:`, error)
       continue
     }
   }
@@ -119,42 +125,6 @@ export function parseChartCSV(
     chartPeriod,
     date,
   }
-}
-
-/**
- * Parse a CSV line handling quoted fields
- */
-function parseCSVLine(line: string): string[] {
-  const values: string[] = []
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-    const nextChar = line[i + 1]
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped quote
-        current += '"'
-        i++ // Skip next quote
-      } else {
-        // Toggle quote state
-        inQuotes = !inQuotes
-      }
-    } else if (char === ',' && !inQuotes) {
-      // End of field
-      values.push(current)
-      current = ''
-    } else {
-      current += char
-    }
-  }
-
-  // Add last field
-  values.push(current)
-
-  return values
 }
 
 /**

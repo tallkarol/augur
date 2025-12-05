@@ -3,37 +3,20 @@ import { supabase } from '@/lib/supabase'
 import { format, parseISO } from 'date-fns'
 import { autoEnrichTrack } from '@/lib/autoEnrich'
 import { enrichTrackData } from '@/lib/enrichArtistData'
-
-async function getAvailableDates(): Promise<string[]> {
-  try {
-    const { data, error } = await supabase
-      .from('chart_entries')
-      .select('date')
-      .eq('platform', 'spotify')
-      .order('date', { ascending: false })
-
-    if (error) {
-      console.error('[TracksAPI] Error fetching available dates:', error)
-      return []
-    }
-
-    const dates = [...new Set((data || []).map(e => format(new Date(e.date), 'yyyy-MM-dd')))].sort()
-    return dates
-  } catch (error) {
-    console.error('[TracksAPI] Error getting available dates:', error)
-    return []
-  }
-}
+import { getAvailableDates } from '@/lib/serverUtils'
+import { normalizeRegion } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const dateParam = searchParams.get('date')
     const limitParam = searchParams.get('limit')
+    const offsetParam = searchParams.get('offset')
     const periodParam = searchParams.get('period') as 'daily' | 'weekly' | 'monthly' || 'daily'
     const chartTypeParam = searchParams.get('chartType') as 'regional' | 'viral' || 'regional'
     const regionParam = searchParams.get('region') || null
     const limit = limitParam ? parseInt(limitParam, 10) : 50
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0
 
     const availableDates = await getAvailableDates()
     const date = dateParam ? dateParam : (availableDates[availableDates.length - 1] || format(new Date(), 'yyyy-MM-dd'))
@@ -57,20 +40,23 @@ export async function GET(request: NextRequest) {
       .limit(limit * 2)
 
     // Handle region filter
-    if (regionParam === null || regionParam === 'global' || regionParam === '') {
+    const normalizedRegion = normalizeRegion(regionParam)
+    if (normalizedRegion === null) {
       query = query.is('region', null)
     } else {
-      query = query.eq('region', regionParam)
+      query = query.eq('region', normalizedRegion)
     }
 
     const { data, error } = await query
 
     if (error) {
       console.error('[TracksAPI] Database error:', error)
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         { error: 'Failed to fetch tracks', details: error.message },
         { status: 500 }
       )
+      errorResponse.headers.set('Cache-Control', 'no-store')
+      return errorResponse
     }
 
     const latestEntries = data || []
@@ -138,7 +124,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Convert to array and sort by position
-    let tracks = Array.from(trackMap.values())
+    let allTracks = Array.from(trackMap.values())
       .map(data => {
         const chartTypes = chartTypesMap.get(data.track.id) || new Set()
         return {
@@ -163,60 +149,65 @@ export async function GET(request: NextRequest) {
         }
       })
       .sort((a, b) => a.position - b.position)
-      .slice(0, limit)
-
-    // Enrich top tracks with Spotify API (on-the-fly, non-blocking)
-    const topTracks = tracks.slice(0, 10)
-    console.log('[Tracks API] Enriching top tracks', { count: topTracks.length })
-    const enrichedTracks = await Promise.all(
-      topTracks.map(async (track) => {
-        console.log('[Tracks API] Enriching track', { 
-          trackId: track.id, 
-          trackName: track.name,
-          currentPreviewUrl: track.previewUrl 
-        })
-        const enriched = await enrichTrackData(track.trackData, track.artist, true)
-        console.log('[Tracks API] Enriched track result', { 
-          trackId: track.id,
-          enrichedPreviewUrl: enriched.previewUrl,
-          hasPreviewUrl: !!enriched.previewUrl
-        })
-        return {
-          ...track,
-          previewUrl: enriched.previewUrl || track.previewUrl,
-          imageUrl: enriched.imageUrl || track.imageUrl,
-          externalId: enriched.externalId || track.externalId,
-        }
-      })
-    )
     
-    // Merge enriched tracks back
-    tracks = tracks.map(track => {
-      const enriched = enrichedTracks.find(e => e.id === track.id)
-      return enriched || track
+    const total = allTracks.length
+    const paginatedTracks = allTracks.slice(offset, offset + limit)
+
+    // Remove trackData from response before returning
+    const finalTracks = paginatedTracks.map(track => {
+      const { trackData, ...rest } = track
+      return rest
     })
 
-    // Remove trackData from response
-    tracks = tracks.map(({ trackData, ...rest }) => rest)
+    // Enrich top tracks in background (non-blocking)
+    // Don't wait for enrichment - return response immediately
+    const topTracks = paginatedTracks.slice(0, 10)
+    if (topTracks.length > 0) {
+      // Fire and forget - enrich in background
+      Promise.all(
+        topTracks.map(async (track) => {
+          try {
+            // Only enrich if missing preview URL
+            if (!track.previewUrl && track.trackData) {
+              const enriched = await enrichTrackData(track.trackData, track.artist, true)
+              // Update in database asynchronously (non-blocking)
+              if (enriched.previewUrl || enriched.imageUrl || enriched.externalId) {
+                await supabase
+                  .from('tracks')
+                  .update({
+                    previewUrl: enriched.previewUrl || null,
+                    imageUrl: enriched.imageUrl || null,
+                    externalId: enriched.externalId || null,
+                  })
+                  .eq('id', track.id)
+              }
+            }
+          } catch (error) {
+            // Silently fail - enrichment is optional
+            console.error('[Tracks API] Failed to enrich track:', track.id, error)
+          }
+        })
+      ).catch(() => {
+        // Silently handle any errors
+      })
+    }
 
-    console.log('[Tracks API] Returning tracks', { 
-      count: tracks.length,
-      tracksWithPreview: tracks.filter(t => t.previewUrl).length,
-      sampleTrack: tracks[0] ? {
-        id: tracks[0].id,
-        name: tracks[0].name,
-        previewUrl: tracks[0].previewUrl
-      } : null
-    })
-
-    return NextResponse.json({ 
-      tracks: tracks || [], 
+    const response = NextResponse.json({ 
+      tracks: finalTracks || [], 
+      total,
+      limit,
+      offset,
       date: format(latestDate, 'yyyy-MM-dd'),
       chartType: chartTypeParam,
       chartPeriod: periodParam,
       region: regionParam,
       availableDates,
     })
+
+    // Add caching headers - cache for 1 minute
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    
+    return response
   } catch (error) {
     console.error('Error fetching tracks:', error)
     return NextResponse.json(

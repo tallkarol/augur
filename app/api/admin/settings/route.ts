@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { clearLeadScoreCache } from '@/lib/metrics'
 
 // GET: Load all settings
 export async function GET(request: NextRequest) {
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate category
-    const validCategories = ['playlist', 'json_api', 'csv_upload', 'cron', 'system']
+    const validCategories = ['system', 'csv_upload', 'display', 'dashboard', 'export', 'lead_score']
     if (!validCategories.includes(category)) {
       return NextResponse.json(
         { error: `Invalid category. Must be one of: ${validCategories.join(', ')}` },
@@ -112,6 +113,11 @@ export async function POST(request: NextRequest) {
 
     const allSuccess = results.every(r => r.success)
     
+    // Clear lead score cache if lead_score settings were updated
+    if (category === 'lead_score') {
+      clearLeadScoreCache()
+    }
+    
     return NextResponse.json({
       success: allSuccess,
       results,
@@ -129,7 +135,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to get default settings
-export function getDefaultSettings() {
+function getDefaultSettings() {
   return {
     playlist: {
       enabled: false,
