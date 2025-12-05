@@ -25,10 +25,13 @@ Intelligent charting artists and songs analytics for record labels.
 npm install
 ```
 
-2. Set up your database:
-   - Create a PostgreSQL database (or use Supabase)
-   - Copy `.env.local.example` to `.env.local`
-   - Add your `DATABASE_URL` to `.env.local`
+2. Set up your environment variables:
+   - Copy `.env.example` to `.env`
+   - Fill in your credentials:
+     - `DATABASE_URL` - Your Supabase PostgreSQL connection string (from Supabase Dashboard → Settings → Database → Connection string)
+     - `SUPABASE_PROJECT_URL` - Your Supabase project URL (e.g., `https://xxxx.supabase.co`)
+     - `SUPABASE_API_KEY` - Your Supabase anon/public key (from Supabase Dashboard → Settings → API)
+     - `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` - (Optional) Spotify API credentials for metadata enrichment
 
 3. Set up Prisma:
 ```bash
