@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { Typography } from "@/components/typography"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -14,49 +14,114 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { DashboardFilters } from "@/components/DashboardFilters"
+import { Button } from "@/components/ui/button"
+import { DateRangeSelector, type DateRange, type DateRangePreset } from "@/components/DateRangeSelector"
 import { ExportButton } from "@/components/ExportButton"
 import { ArtistModal } from "@/components/ArtistModal"
 import { TrackArtistButton } from "@/components/TrackArtistButton"
 import { Pagination } from "@/components/Pagination"
 import { fetchArtists } from "@/lib/api"
 import { TrendingUp, TrendingDown, Minus, Search } from "lucide-react"
-import { format } from "date-fns"
-import type { Period } from "@/components/PeriodSelector"
+import { format, subDays, startOfYear } from "date-fns"
 import Link from "next/link"
 
 export default function ArtistsPage() {
   const [artists, setArtists] = useState<any[]>([])
   const [filteredArtists, setFilteredArtists] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [date, setDate] = useState<string>("")
-  const [period, setPeriod] = useState<Period>("daily")
-  const [chartType, setChartType] = useState<'regional' | 'viral'>('viral')
-  const [region, setRegion] = useState<string | null>(null)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [dateRange, setDateRange] = useState<DateRange>({ startDate: '', endDate: '' })
+  const [selectedPreset, setSelectedPreset] = useState<DateRangePreset>('yesterday')
+  const [chartType, setChartType] = useState<'regional' | 'viral' | 'blended'>('blended')
+  const [region, setRegion] = useState<'us' | 'global'>('us')
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [limit, setLimit] = useState(20) // Will be updated from settings
+  const [limit, setLimit] = useState(20)
   const [currentPage, setCurrentPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [trackedArtistIds, setTrackedArtistIds] = useState<Set<string>>(new Set())
+  const [periodStats, setPeriodStats] = useState<{
+    last30Days?: { highestPosition?: number; averagePosition?: number; daysInTop10?: number; daysInTop20?: number }
+    thisYear?: { highestPosition?: number; averagePosition?: number; daysInTop10?: number; daysInTop20?: number }
+  } | null>(null)
+  const [selectedStatsPeriod, setSelectedStatsPeriod] = useState<'last30Days' | 'thisYear'>('last30Days')
 
-  // Load dashboard settings for itemsPerPage
+  // Load settings on mount
   useEffect(() => {
-    async function loadDashboardSettings() {
+    async function loadSettings() {
       try {
         const res = await fetch('/api/admin/settings')
         const data = await res.json()
         const dashboardSettings = data.settings?.dashboard || {}
+        
+        // Apply default chart type
+        if (dashboardSettings.defaultChartType) {
+          setChartType(dashboardSettings.defaultChartType as 'regional' | 'viral' | 'blended')
+        }
+        
+        // Apply default region
+        if (dashboardSettings.defaultRegion) {
+          setRegion(dashboardSettings.defaultRegion as 'us' | 'global')
+        }
+        
+        // Apply items per page
         if (dashboardSettings.itemsPerPage) {
           setLimit(dashboardSettings.itemsPerPage)
         }
+        
+        // Apply default date range preset
+        const defaultPreset = dashboardSettings.defaultDateRange || 'yesterday'
+        setSelectedPreset(defaultPreset as DateRangePreset)
+        
+        // Calculate date range based on preset
+        const today = new Date()
+        let startDate = ''
+        let endDate = ''
+        
+        switch (defaultPreset) {
+          case 'yesterday':
+            const yesterday = format(subDays(today, 1), 'yyyy-MM-dd')
+            startDate = yesterday
+            endDate = yesterday
+            break
+          case 'lastWeek':
+            const yesterdayDate = subDays(today, 1)
+            const weekAgo = subDays(yesterdayDate, 7)
+            startDate = format(weekAgo, 'yyyy-MM-dd')
+            endDate = format(yesterdayDate, 'yyyy-MM-dd')
+            break
+          case 'last30':
+            startDate = format(subDays(today, 30), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          case 'last90':
+            startDate = format(subDays(today, 90), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          case 'thisYear':
+            startDate = format(startOfYear(today), 'yyyy-MM-dd')
+            endDate = format(today, 'yyyy-MM-dd')
+            break
+          default:
+            const defaultYesterday = format(subDays(today, 1), 'yyyy-MM-dd')
+            startDate = defaultYesterday
+            endDate = defaultYesterday
+        }
+        
+        setDateRange({ startDate, endDate })
+        setSettingsLoaded(true)
       } catch (error) {
-        console.error('Failed to load dashboard settings:', error)
+        console.error('Failed to load settings:', error)
+        // Fallback to defaults
+        const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd')
+        setDateRange({ startDate: yesterday, endDate: yesterday })
+        setSelectedPreset('yesterday')
+        setSettingsLoaded(true)
       }
     }
-    loadDashboardSettings()
+    loadSettings()
   }, [])
 
   // Fetch tracked artists once on mount
@@ -76,32 +141,37 @@ export default function ArtistsPage() {
     loadTrackedArtists()
   }, [])
 
+  // Load artists when filters change
   useEffect(() => {
     async function loadArtists() {
+      if (!dateRange.startDate || !dateRange.endDate) return
+      
       setLoading(true)
       try {
         const offset = (currentPage - 1) * limit
         const data = await fetchArtists({ 
           limit, 
           offset,
-          date: date || undefined, 
-          period,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
           chartType,
-          region,
+          region: region === 'us' ? 'us' : null,
         })
         setArtists(data.artists || [])
         setFilteredArtists(data.artists || [])
         setTotal(data.total || 0)
-        if (data.date) setDate(data.date)
         if (data.availableDates) setAvailableDates(data.availableDates)
+        if (data.periodStats) setPeriodStats(data.periodStats)
       } catch (error) {
         console.error("Failed to load artists:", error)
       } finally {
         setLoading(false)
       }
     }
-    loadArtists()
-  }, [date, limit, currentPage, period, chartType, region])
+    if (settingsLoaded) {
+      loadArtists()
+    }
+  }, [dateRange, limit, currentPage, chartType, region, settingsLoaded])
 
   useEffect(() => {
     if (searchQuery) {
@@ -121,7 +191,11 @@ export default function ArtistsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [date, period, chartType, region])
+  }, [dateRange, chartType, region])
+
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range)
+  }
 
   if (loading) {
     return (
@@ -138,44 +212,122 @@ export default function ArtistsPage() {
   }
 
   return (
-    <div className="p-8 space-y-8">
-      {/* Header Section */}
-      <div className="space-y-4">
+    <div className="p-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-        <Typography variant="h1">Trending Artists</Typography>
-        <Typography variant="subtitle" className="mt-2">
-          {date && `Data as of ${format(new Date(date), 'MMMM d, yyyy')} (${period})`}
-            {region && ` • ${region}`}
-        </Typography>
+          <Typography variant="h1">Trending Artists</Typography>
+          <Typography variant="subtitle" className="mt-1">
+            {dateRange.startDate && dateRange.endDate && (
+              dateRange.startDate === dateRange.endDate
+                ? format(new Date(dateRange.startDate), 'MMMM d, yyyy')
+                : `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d, yyyy')}`
+            )}
+          </Typography>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* US/GLOBAL Toggle */}
+          <Tabs value={region} onValueChange={(v) => setRegion(v as 'us' | 'global')}>
+            <TabsList>
+              <TabsTrigger value="us">US</TabsTrigger>
+              <TabsTrigger value="global">GLOBAL</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
-        {/* Chart Type Tabs */}
-        <Tabs value={chartType === 'regional' ? 'top' : chartType} onValueChange={(value) => {
-          if (value === 'top') {
-            setChartType('regional')
-          } else {
-            setChartType(value as 'regional' | 'viral')
-          }
-        }} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="viral">VIRAL</TabsTrigger>
-            <TabsTrigger value="top">TOP</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Chart Type Tabs */}
+      <Tabs value={chartType} onValueChange={(v) => setChartType(v as 'regional' | 'viral' | 'blended')}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="viral">VIRAL</TabsTrigger>
+          <TabsTrigger value="regional">TOP</TabsTrigger>
+          <TabsTrigger value="blended">BLENDED</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-        {/* Combined Filters */}
-        <DashboardFilters
-          date={date}
-          period={period}
-          region={region}
-          availableDates={availableDates}
-          onDateChange={setDate}
-          onPeriodChange={setPeriod}
-          onRegionChange={setRegion}
-        />
+      {/* Date Range Selector */}
+      <DateRangeSelector
+        value={selectedPreset}
+        onChange={handleDateRangeChange}
+        onPresetChange={setSelectedPreset}
+      />
 
-        {/* Search and Limit */}
-        <div className="flex gap-4 flex-wrap">
+      {/* Period-Specific Stats */}
+      {periodStats && (periodStats.last30Days || periodStats.thisYear) && (
+        <>
+          <div className="flex gap-2">
+            <Button
+              variant={selectedStatsPeriod === 'last30Days' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedStatsPeriod('last30Days')}
+              className="text-xs"
+            >
+              LAST 30 DAYS
+            </Button>
+            <Button
+              variant={selectedStatsPeriod === 'thisYear' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedStatsPeriod('thisYear')}
+              className="text-xs"
+            >
+              THIS YEAR
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Highest Position</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {selectedStatsPeriod === 'last30Days' 
+                    ? (periodStats.last30Days?.highestPosition ? `#${periodStats.last30Days.highestPosition}` : 'N/A')
+                    : (periodStats.thisYear?.highestPosition ? `#${periodStats.thisYear.highestPosition}` : 'N/A')}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Avg Position</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {selectedStatsPeriod === 'last30Days'
+                    ? (periodStats.last30Days?.averagePosition ? `#${periodStats.last30Days.averagePosition.toFixed(1)}` : 'N/A')
+                    : (periodStats.thisYear?.averagePosition ? `#${periodStats.thisYear.averagePosition.toFixed(1)}` : 'N/A')}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Days in Top 10</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {selectedStatsPeriod === 'last30Days'
+                    ? (periodStats.last30Days?.daysInTop10 ?? 0)
+                    : (periodStats.thisYear?.daysInTop10 ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Days in Top 20</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {selectedStatsPeriod === 'last30Days'
+                    ? (periodStats.last30Days?.daysInTop20 ?? 0)
+                    : (periodStats.thisYear?.daysInTop20 ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* Search and Limit */}
+      <div className="flex gap-4 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <Label>Search</Label>
           <div className="relative">
@@ -188,7 +340,7 @@ export default function ArtistsPage() {
             />
           </div>
         </div>
-          <div className="min-w-[150px]">
+        <div className="min-w-[150px]">
           <Label>Limit</Label>
           <Input
             type="number"
@@ -197,7 +349,6 @@ export default function ArtistsPage() {
             min={10}
             max={200}
           />
-          </div>
         </div>
       </div>
 
@@ -208,11 +359,11 @@ export default function ArtistsPage() {
             <ExportButton
               endpoint="artists"
               params={{
-                date: date || undefined,
+                startDate: dateRange.startDate || undefined,
+                endDate: dateRange.endDate || undefined,
                 limit: limit,
-                period: period,
                 chartType: chartType,
-                region: region || '',
+                region: region === 'us' ? 'us' : '',
               }}
             />
           </div>
@@ -371,9 +522,9 @@ export default function ArtistsPage() {
         artistId={selectedArtistId}
         open={modalOpen}
         onOpenChange={setModalOpen}
-        chartType={chartType}
-        chartPeriod={period}
-        region={region}
+        chartType={chartType === 'blended' ? 'regional' : chartType}
+        chartPeriod="daily"
+        region={region === 'us' ? 'us' : null}
       />
     </div>
   )

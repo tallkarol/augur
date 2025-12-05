@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, startOfYear, subDays } from 'date-fns'
 import { autoEnrichTrack } from '@/lib/autoEnrich'
 import { enrichTrackData } from '@/lib/enrichArtistData'
 import { getAvailableDates } from '@/lib/serverUtils'
@@ -10,16 +10,34 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const dateParam = searchParams.get('date')
+    const startDateParam = searchParams.get('startDate')
+    const endDateParam = searchParams.get('endDate')
     const limitParam = searchParams.get('limit')
     const offsetParam = searchParams.get('offset')
     const periodParam = searchParams.get('period') as 'daily' | 'weekly' | 'monthly' || 'daily'
-    const chartTypeParam = searchParams.get('chartType') as 'regional' | 'viral' || 'regional'
+    const chartTypeParam = searchParams.get('chartType') as 'regional' | 'viral' | 'blended' || 'regional'
     const regionParam = searchParams.get('region') || null
     const limit = limitParam ? parseInt(limitParam, 10) : 50
     const offset = offsetParam ? parseInt(offsetParam, 10) : 0
 
     const availableDates = await getAvailableDates()
-    const date = dateParam ? dateParam : (availableDates[availableDates.length - 1] || format(new Date(), 'yyyy-MM-dd'))
+    
+    // Determine date range
+    let startDate: Date
+    let endDate: Date
+    
+    if (startDateParam && endDateParam) {
+      startDate = parseISO(startDateParam)
+      endDate = parseISO(endDateParam)
+    } else if (dateParam) {
+      startDate = parseISO(dateParam)
+      endDate = parseISO(dateParam)
+    } else {
+      // Default to latest available date
+      const latestDate = availableDates[availableDates.length - 1] || format(new Date(), 'yyyy-MM-dd')
+      startDate = parseISO(latestDate)
+      endDate = parseISO(latestDate)
+    }
 
     // Build query with filters
     let query = supabase
@@ -31,19 +49,26 @@ export async function GET(request: NextRequest) {
           artists (*)
         )
       `)
-      .lte('date', parseISO(date).toISOString())
-      .eq('chartType', chartTypeParam)
+      .gte('date', startDate.toISOString())
+      .lte('date', endDate.toISOString())
       .eq('chartPeriod', periodParam)
       .eq('platform', 'spotify')
       .order('date', { ascending: false })
       .order('position', { ascending: true })
       .limit(limit * 2)
 
+    // Handle chart type filter - 'blended' includes both viral and regional
+    if (chartTypeParam === 'blended') {
+      query = query.in('chartType', ['viral', 'regional'])
+    } else {
+      query = query.eq('chartType', chartTypeParam)
+    }
+
     // Handle region filter
     const normalizedRegion = normalizeRegion(regionParam)
-    if (normalizedRegion === null) {
+    if (regionParam === 'global') {
       query = query.is('region', null)
-    } else {
+    } else if (normalizedRegion !== null && regionParam && regionParam !== '') {
       query = query.eq('region', normalizedRegion)
     }
 
@@ -62,7 +87,7 @@ export async function GET(request: NextRequest) {
     const latestEntries = data || []
 
     // Get the latest date
-    const latestDate = latestEntries[0]?.date ? new Date(latestEntries[0].date) : parseISO(date)
+    const latestDate = latestEntries[0]?.date ? new Date(latestEntries[0].date) : endDate
     const entriesForDate = latestEntries.filter(e => {
       const entryDate = new Date(e.date)
       return entryDate.getTime() === latestDate.getTime()
@@ -192,16 +217,56 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Calculate period stats
+    const today = new Date()
+    const thirtyDaysAgo = subDays(today, 30)
+    const yearStart = startOfYear(today)
+    
+    // Query for period-specific stats
+    const { data: last30DaysData } = await supabase
+      .from('chart_entries')
+      .select('position')
+      .gte('date', thirtyDaysAgo.toISOString())
+      .lte('date', today.toISOString())
+      .in('trackId', Array.from(trackMap.keys()).slice(0, 10))
+      .eq('platform', 'spotify')
+    
+    const { data: thisYearData } = await supabase
+      .from('chart_entries')
+      .select('position')
+      .gte('date', yearStart.toISOString())
+      .lte('date', today.toISOString())
+      .in('trackId', Array.from(trackMap.keys()).slice(0, 10))
+      .eq('platform', 'spotify')
+
+    const periodStats = {
+      last30Days: last30DaysData ? {
+        highestPosition: Math.min(...last30DaysData.map(d => d.position)),
+        averagePosition: last30DaysData.reduce((sum, d) => sum + d.position, 0) / last30DaysData.length,
+        daysInTop10: last30DaysData.filter(d => d.position <= 10).length,
+        daysInTop20: last30DaysData.filter(d => d.position <= 20).length,
+      } : null,
+      thisYear: thisYearData ? {
+        highestPosition: Math.min(...thisYearData.map(d => d.position)),
+        averagePosition: thisYearData.reduce((sum, d) => sum + d.position, 0) / thisYearData.length,
+        daysInTop10: thisYearData.filter(d => d.position <= 10).length,
+        daysInTop20: thisYearData.filter(d => d.position <= 20).length,
+      } : null,
+    }
+
     const response = NextResponse.json({ 
       tracks: finalTracks || [], 
       total,
       limit,
       offset,
+      startDate: format(startDate, 'yyyy-MM-dd'),
+      endDate: format(endDate, 'yyyy-MM-dd'),
       date: format(latestDate, 'yyyy-MM-dd'),
       chartType: chartTypeParam,
       chartPeriod: periodParam,
       region: regionParam,
       availableDates,
+      periodStats,
     })
 
     // Add caching headers - cache for 1 minute
