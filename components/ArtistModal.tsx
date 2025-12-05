@@ -12,13 +12,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { PositionChart } from "@/components/PositionChart"
 import { StreamsChart } from "@/components/StreamsChart"
-import { Typography } from "@/components/typography"
 import { TrackArtistButton } from "@/components/TrackArtistButton"
-import { Loader2, Music, TrendingUp, Users, ExternalLink } from "lucide-react"
+import { Loader2, ExternalLink } from "lucide-react"
 import { format } from "date-fns"
 import { SpotifyWidget } from "@/components/SpotifyWidget"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
 
 interface ArtistModalProps {
   artistId: string | null
@@ -42,7 +40,6 @@ export function ArtistModal({
   const [tracks, setTracks] = useState<any[]>([])
   const [chartHistory, setChartHistory] = useState<any[]>([])
   const [stats, setStats] = useState<any>(null)
-  const [selectedPeriod, setSelectedPeriod] = useState<'last30Days' | 'thisYear'>('last30Days')
 
   useEffect(() => {
     if (open && artistId) {
@@ -168,84 +165,8 @@ export function ArtistModal({
           </div>
         ) : artist ? (
           <>
-
-            {/* Period Selector */}
-            <div className="flex gap-2 mb-4">
-              <Button
-                variant={selectedPeriod === 'last30Days' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedPeriod('last30Days')}
-                className="text-xs"
-              >
-                LAST 30 DAYS
-              </Button>
-              <Button
-                variant={selectedPeriod === 'thisYear' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedPeriod('thisYear')}
-                className="text-xs"
-              >
-                THIS YEAR
-              </Button>
-            </div>
-
-            {/* Period-Specific Stats */}
-            {stats && (stats.last30Days || stats.thisYear) && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Highest Position</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {selectedPeriod === 'last30Days' 
-                        ? (stats.last30Days?.highestPosition ? `#${stats.last30Days.highestPosition}` : 'N/A')
-                        : (stats.thisYear?.highestPosition ? `#${stats.thisYear.highestPosition}` : 'N/A')}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Avg Position</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {selectedPeriod === 'last30Days'
-                        ? (stats.last30Days?.averagePosition ? `#${stats.last30Days.averagePosition.toFixed(1)}` : 'N/A')
-                        : (stats.thisYear?.averagePosition ? `#${stats.thisYear.averagePosition.toFixed(1)}` : 'N/A')}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Days in Top 10</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {selectedPeriod === 'last30Days'
-                        ? (stats.last30Days?.daysInTop10 ?? 0)
-                        : (stats.thisYear?.daysInTop10 ?? 0)}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Days in Top 20</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {selectedPeriod === 'last30Days'
-                        ? (stats.last30Days?.daysInTop20 ?? 0)
-                        : (stats.thisYear?.daysInTop20 ?? 0)}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Legacy Stats Grid (fallback) */}
-            {stats && !stats.last30Days && !stats.thisYear && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {/* Stats Grid based on loaded data */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Best Position</CardDescription>
@@ -289,7 +210,6 @@ export function ArtistModal({
                 </CardContent>
               </Card>
             </div>
-            )}
 
             {/* Dashboard Metrics */}
             {stats?.aggregateLeadScore !== undefined && (
