@@ -65,7 +65,9 @@ class SpotifyClient {
     this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET || ''
 
     if (!this.clientId || !this.clientSecret) {
-      console.warn('Spotify credentials not configured')
+      console.warn('[SpotifyClient] Spotify credentials not configured. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env')
+    } else {
+      console.log('[SpotifyClient] Spotify credentials configured')
     }
   }
 
@@ -116,7 +118,10 @@ class SpotifyClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = await this.getAccessToken()
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}${endpoint}`
+    console.log(`[SpotifyClient] Making request to: ${url}`)
+
+    const response = await fetch(url, {
       ...options,
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -130,8 +135,28 @@ class SpotifyClient {
         const retryAfter = response.headers.get('Retry-After')
         throw new Error(`Rate limited. Retry after ${retryAfter} seconds`)
       }
-      const error = await response.text()
-      throw new Error(`Spotify API error: ${response.status} ${error}`)
+      
+      const errorText = await response.text()
+      let errorDetails: any = {}
+      try {
+        errorDetails = JSON.parse(errorText)
+      } catch {
+        errorDetails = { raw: errorText }
+      }
+      
+      console.error(`[SpotifyClient] API Error ${response.status}:`, {
+        endpoint,
+        status: response.status,
+        statusText: response.statusText,
+        error: errorDetails,
+      })
+      
+      // Provide more helpful error messages
+      if (response.status === 404) {
+        throw new Error(`Spotify API error: 404 - Resource not found. The playlist ID may be incorrect or the playlist may not be accessible with your current authentication. Error: ${JSON.stringify(errorDetails)}`)
+      }
+      
+      throw new Error(`Spotify API error: ${response.status} ${JSON.stringify(errorDetails)}`)
     }
 
     return response.json()
@@ -208,6 +233,151 @@ class SpotifyClient {
     // Format: spotify:track:4iV5W9uYEdYUVa79Axb7Rh
     const match = uri.match(/spotify:(track|artist):([a-zA-Z0-9]+)/)
     return match ? match[2] : null
+  }
+
+  /**
+   * Search for playlists
+   */
+  async searchPlaylists(query: string, limit: number = 10): Promise<any[]> {
+    try {
+      if (!this.clientId || !this.clientSecret) {
+        throw new Error('Spotify credentials not configured. Cannot search playlists.')
+      }
+      const encodedQuery = encodeURIComponent(query)
+      console.log(`[SpotifyClient] Searching playlists with query: "${query}"`)
+      const response = await this.request<any>(
+        `/search?q=${encodedQuery}&type=playlist&limit=${limit}`
+      )
+      
+      const playlists = response.playlists?.items || []
+      console.log(`[SpotifyClient] Search returned ${playlists.length} playlists`)
+      if (playlists.length > 0 && playlists[0]) {
+        console.log(`[SpotifyClient] First result: ${playlists[0].name || 'Unknown'} (ID: ${playlists[0].id || 'N/A'})`)
+      }
+      
+      return playlists.filter(p => p !== null && p !== undefined)
+    } catch (error) {
+      console.error(`[SpotifyClient] Error searching playlists:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get playlist by ID
+   * 
+   * Note: According to Spotify API docs, if neither market or user country are provided,
+   * the content is considered unavailable. We use 'US' as default market.
+   */
+  async getPlaylist(playlistId: string, market: string = 'US'): Promise<any> {
+    try {
+      if (!this.clientId || !this.clientSecret) {
+        throw new Error('Spotify credentials not configured. Cannot fetch playlists.')
+      }
+      console.log(`[SpotifyClient] Fetching playlist: ${playlistId} (market: ${market})`)
+      
+      // Add market parameter - required for Client Credentials flow
+      // According to Spotify docs: "If neither market or user country are provided, 
+      // the content is considered unavailable for the client."
+      const playlist = await this.request(`/playlists/${playlistId}?market=${market}`)
+      console.log(`[SpotifyClient] Successfully fetched playlist: ${playlist.name}`)
+      return playlist
+    } catch (error: any) {
+      console.error(`[SpotifyClient] Error getting playlist ${playlistId}:`, error)
+      
+      // If 404, try searching for the playlist as a fallback
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        console.log(`[SpotifyClient] Playlist not found, attempting to search for "Viral 50" playlists...`)
+        try {
+          const searchResults = await this.searchPlaylists('Viral 50', 5)
+          if (searchResults.length > 0) {
+            console.log(`[SpotifyClient] Found ${searchResults.length} "Viral 50" playlists. First result: ${searchResults[0].name} (ID: ${searchResults[0].id})`)
+            throw new Error(
+              `Playlist ID ${playlistId} not found. Found similar playlists: ${searchResults.map(p => `${p.name} (${p.id})`).join(', ')}. ` +
+              `Please verify the playlist ID or use one of the found IDs.`
+            )
+          }
+        } catch (searchError) {
+          // If search also fails, just throw the original error
+        }
+      }
+      
+      throw error
+    }
+  }
+
+  /**
+   * Get playlist tracks (handles pagination)
+   * 
+   * Note: According to Spotify API docs, if neither market or user country are provided,
+   * the content is considered unavailable. We use 'US' as default market.
+   */
+  async getPlaylistTracks(playlistId: string, limit: number = 50, offset: number = 0, market: string = 'US'): Promise<any> {
+    try {
+      // Add market parameter - required for Client Credentials flow
+      const response = await this.request<{
+        items: Array<{
+          track: SpotifyTrack | null
+          added_at: string
+        }>
+        total: number
+        limit: number
+        offset: number
+        next: string | null
+      }>(`/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}&market=${market}`)
+
+      return response
+    } catch (error) {
+      console.error(`Error getting playlist tracks ${playlistId}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get all tracks from a playlist (handles pagination automatically)
+   * 
+   * Note: According to Spotify API docs, if neither market or user country are provided,
+   * the content is considered unavailable. We use 'US' as default market.
+   */
+  async getAllPlaylistTracks(playlistId: string, market: string = 'US'): Promise<Array<{
+    track: SpotifyTrack | null
+    added_at: string
+    position: number
+  }>> {
+    const allTracks: Array<{
+      track: SpotifyTrack | null
+      added_at: string
+      position: number
+    }> = []
+    
+    let offset = 0
+    const limit = 50
+    let hasMore = true
+
+    while (hasMore) {
+      try {
+        const response = await this.getPlaylistTracks(playlistId, limit, offset, market)
+        
+        response.items.forEach((item, index) => {
+          allTracks.push({
+            ...item,
+            position: offset + index + 1,
+          })
+        })
+
+        hasMore = response.next !== null
+        offset += limit
+
+        // Rate limit protection - small delay between requests
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+      } catch (error) {
+        console.error(`Error fetching playlist tracks at offset ${offset}:`, error)
+        throw error
+      }
+    }
+
+    return allTracks
   }
 }
 

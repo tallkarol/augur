@@ -1,19 +1,35 @@
-export async function fetchArtists(params?: { date?: string; limit?: number; period?: 'daily' | 'weekly' | 'monthly' }) {
+export async function fetchArtists(params?: { 
+  date?: string
+  limit?: number
+  period?: 'daily' | 'weekly' | 'monthly'
+  chartType?: 'regional' | 'viral'
+  region?: string | null
+}) {
   const searchParams = new URLSearchParams()
   if (params?.date) searchParams.set('date', params.date)
   if (params?.limit) searchParams.set('limit', params.limit.toString())
   if (params?.period) searchParams.set('period', params.period)
+  if (params?.chartType) searchParams.set('chartType', params.chartType)
+  if (params?.region !== undefined) searchParams.set('region', params.region || '')
 
   const res = await fetch(`/api/artists?${searchParams}`)
   if (!res.ok) throw new Error('Failed to fetch artists')
   return res.json()
 }
 
-export async function fetchTracks(params?: { date?: string; limit?: number; period?: 'daily' | 'weekly' | 'monthly' }) {
+export async function fetchTracks(params?: { 
+  date?: string
+  limit?: number
+  period?: 'daily' | 'weekly' | 'monthly'
+  chartType?: 'regional' | 'viral'
+  region?: string | null
+}) {
   const searchParams = new URLSearchParams()
   if (params?.date) searchParams.set('date', params.date)
   if (params?.limit) searchParams.set('limit', params.limit.toString())
   if (params?.period) searchParams.set('period', params.period)
+  if (params?.chartType) searchParams.set('chartType', params.chartType)
+  if (params?.region !== undefined) searchParams.set('region', params.region || '')
 
   const res = await fetch(`/api/tracks?${searchParams}`)
   if (!res.ok) throw new Error('Failed to fetch tracks')

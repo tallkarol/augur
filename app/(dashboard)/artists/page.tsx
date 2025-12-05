@@ -15,11 +15,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DateRangePicker } from "@/components/DateRangePicker"
 import { ExportButton } from "@/components/ExportButton"
-import { EnrichButton } from "@/components/EnrichButton"
+import { ArtistModal } from "@/components/ArtistModal"
+import { ChartFilters } from "@/components/ChartFilters"
 import { fetchArtists } from "@/lib/api"
 import { TrendingUp, TrendingDown, Minus, Search } from "lucide-react"
 import { format } from "date-fns"
 import type { Period } from "@/components/PeriodSelector"
+import Link from "next/link"
 
 export default function ArtistsPage() {
   const [artists, setArtists] = useState<any[]>([])
@@ -27,15 +29,25 @@ export default function ArtistsPage() {
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState<string>("")
   const [period, setPeriod] = useState<Period>("daily")
+  const [chartType, setChartType] = useState<'regional' | 'viral'>('regional')
+  const [region, setRegion] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [limit, setLimit] = useState(100)
-  const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>([])
+  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
     async function loadArtists() {
+      setLoading(true)
       try {
-        const data = await fetchArtists({ limit, date: date || undefined, period })
+        const data = await fetchArtists({ 
+          limit, 
+          date: date || undefined, 
+          period,
+          chartType,
+          region,
+        })
         setArtists(data.artists || [])
         setFilteredArtists(data.artists || [])
         if (data.date) setDate(data.date)
@@ -47,7 +59,7 @@ export default function ArtistsPage() {
       }
     }
     loadArtists()
-  }, [date, limit, period])
+  }, [date, limit, period, chartType, region])
 
   useEffect(() => {
     if (searchQuery) {
@@ -75,6 +87,9 @@ export default function ArtistsPage() {
         <Typography variant="h1">Trending Artists</Typography>
         <Typography variant="subtitle" className="mt-2">
           {date && `Data as of ${format(new Date(date), 'MMMM d, yyyy')} (${period})`}
+          {chartType === 'viral' && ' - Viral 50'}
+          {chartType === 'regional' && ' - Top 50'}
+          {region && ` - ${region}`}
         </Typography>
       </div>
 
@@ -86,6 +101,17 @@ export default function ArtistsPage() {
           availableDates={availableDates}
           period={period}
           onPeriodChange={setPeriod}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ChartFilters
+          chartType={chartType}
+          chartPeriod={period}
+          region={region}
+          onChartTypeChange={setChartType}
+          onChartPeriodChange={setPeriod}
+          onRegionChange={setRegion}
         />
       </div>
 
@@ -112,15 +138,6 @@ export default function ArtistsPage() {
             max={200}
           />
         </div>
-        <div className="flex items-end">
-          <EnrichButton
-            type="artist"
-            ids={selectedArtistIds.length > 0 ? selectedArtistIds : filteredArtists.slice(0, 10).map(a => a.id)}
-            size="default"
-          >
-            Enrich Top 10 Artists
-          </EnrichButton>
-        </div>
       </div>
 
       <Card>
@@ -133,6 +150,8 @@ export default function ArtistsPage() {
                 date: date || undefined,
                 limit: limit,
                 period: period,
+                chartType: chartType,
+                region: region || '',
               }}
             />
           </div>
@@ -156,16 +175,55 @@ export default function ArtistsPage() {
               {filteredArtists.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    No artists found
+                    {artists.length === 0 ? (
+                      <div>
+                        <p>No artists found for the selected filters.</p>
+                        <p className="text-sm mt-2">
+                          Upload CSV files using the <a href="/importer" className="text-primary hover:underline">Importer</a> to add data.
+                        </p>
+                      </div>
+                    ) : (
+                      'No artists match your search query'
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredArtists.map((artist, index) => {
                   const change = artist.currentPosition - artist.bestPosition
                   return (
-                    <TableRow key={artist.id}>
+                    <TableRow 
+                      key={artist.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        // Open modal for quick preview, but also allow navigation
+                        setSelectedArtistId(artist.id)
+                        setModalOpen(true)
+                      }}
+                    >
                       <TableCell className="font-medium">{index + 1}</TableCell>
-                      <TableCell className="font-semibold">{artist.name}</TableCell>
+                      <TableCell className="font-semibold">
+                        <div className="flex items-center gap-2">
+                          <Link 
+                            href={`/artists/${artist.id}`}
+                            className="hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {artist.name}
+                          </Link>
+                          <div className="flex gap-1">
+                            {artist.isViral && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                Viral
+                              </span>
+                            )}
+                            {artist.isTop && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                                Top 50
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
                       <TableCell>{artist.bestPosition}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -220,6 +278,15 @@ export default function ArtistsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ArtistModal
+        artistId={selectedArtistId}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        chartType={chartType}
+        chartPeriod={period}
+        region={region}
+      />
     </div>
   )
 }

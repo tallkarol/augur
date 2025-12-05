@@ -20,9 +20,10 @@ interface TrendingTableProps {
     previousPosition?: number | null
   }>
   showArtist?: boolean
+  onTrackClick?: (trackId: string) => void
 }
 
-export function TrendingTable({ data, showArtist = false }: TrendingTableProps) {
+export function TrendingTable({ data, showArtist = false, onTrackClick }: TrendingTableProps) {
   if (data.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8">
@@ -45,7 +46,11 @@ export function TrendingTable({ data, showArtist = false }: TrendingTableProps) 
         {data.map((item) => {
           const change = item.change
           return (
-            <TableRow key={item.id}>
+            <TableRow 
+              key={item.id}
+              className={onTrackClick ? "cursor-pointer hover:bg-muted/50" : ""}
+              onClick={() => onTrackClick?.(item.id)}
+            >
               <TableCell className="font-medium">#{item.position}</TableCell>
               <TableCell className="font-semibold">{item.name}</TableCell>
               {showArtist && <TableCell>{item.artist}</TableCell>}

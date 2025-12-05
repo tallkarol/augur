@@ -63,6 +63,8 @@ model ChartEntry {
   platform      String   @default("spotify")
   chartType     String   @default("regional") // regional, viral
   chartPeriod   String   @default("daily") // daily, weekly
+  region        String?  // City or country code (null for global)
+  regionType    String?  // 'city' | 'country' | null
   source        String?  // label/distributor
   peakRank      Int?
   previousRank  Int?
@@ -78,6 +80,98 @@ model ChartEntry {
   @@index([position])
   @@index([trackId, date])
   @@index([artistId, date])
+  @@index([chartType, chartPeriod, region])
   @@map("chart_entries")
+}
+
+model ChartConfig {
+  id          String   @id @default(cuid())
+  name        String   // Friendly name for the config
+  chartType   String   // 'regional' | 'viral'
+  chartPeriod String   // 'daily' | 'weekly'
+  region      String?  // City or country code (null for global)
+  regionType  String?  // 'city' | 'country' | null
+  enabled     Boolean  @default(true)
+  lastRun     DateTime?
+  nextRun     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([chartType, chartPeriod, region])
+  @@map("chart_configs")
+}
+
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   // JSON string for complex values
+  category    String   // 'playlist', 'json_api', 'csv_upload', 'cron', 'system'
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  // Admin user ID if tracking
+  
+  @@index([category])
+  @@map("settings")
+}
+
+model SyncRun {
+  id            String   @id @default(cuid())
+  source        String   // 'playlist', 'json_api', 'csv_upload', 'cron'
+  chartType     String?  // 'regional' | 'viral'
+  chartPeriod   String?  // 'daily' | 'weekly'
+  region        String?  // Region code
+  status        String   // 'success', 'failed', 'partial'
+  recordsProcessed Int   @default(0)
+  recordsCreated   Int   @default(0)
+  recordsUpdated   Int   @default(0)
+  recordsSkipped   Int   @default(0)
+  errors        String?  // JSON array of error messages
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  duration      Int?     // Duration in milliseconds
+  
+  @@index([source, startedAt])
+  @@index([status])
+  @@map("sync_runs")
+}
+
+model CsvUpload {
+  id            String   @id @default(cuid())
+  fileName      String
+  chartType     String   // 'regional' | 'viral'
+  chartPeriod   String   // 'daily' | 'weekly'
+  date          DateTime // Chart date from filename
+  region        String?  // Region/city from filename (null for global)
+  regionType    String?  // 'city' | 'country' | null
+  recordsProcessed Int   @default(0)
+  recordsCreated   Int   @default(0)
+  recordsUpdated   Int   @default(0)
+  recordsSkipped   Int   @default(0)
+  status        String   // 'pending' | 'processing' | 'success' | 'failed' | 'partial'
+  error         String?
+  uploadedAt    DateTime @default(now())
+  completedAt   DateTime?
+  
+  @@index([date])
+  @@index([chartType, chartPeriod])
+  @@index([status])
+  @@map("csv_uploads")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String?  // For future password auth
+  role          String   @default("user") // 'user' | 'admin'
+  preferences   String?  // JSON string for user preferences (theme, etc.)
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([email])
+  @@index([role])
+  @@map("users")
 }
 

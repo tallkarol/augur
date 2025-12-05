@@ -14,9 +14,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DateRangePicker } from "@/components/DateRangePicker"
-import { PositionChart } from "@/components/PositionChart"
 import { ExportButton } from "@/components/ExportButton"
-import { EnrichButton } from "@/components/EnrichButton"
+import { ChartFilters } from "@/components/ChartFilters"
+import { SpotifyWidget } from "@/components/SpotifyWidget"
+import { TrackModal } from "@/components/TrackModal"
+import { ExternalLink } from "lucide-react"
 import { fetchTracks } from "@/lib/api"
 import { TrendingUp, TrendingDown, Minus, Search } from "lucide-react"
 import { format } from "date-fns"
@@ -28,17 +30,24 @@ export default function TracksPage() {
   const [loading, setLoading] = useState(true)
   const [date, setDate] = useState<string>("")
   const [period, setPeriod] = useState<Period>("daily")
+  const [chartType, setChartType] = useState<'regional' | 'viral'>('regional')
+  const [region, setRegion] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [limit, setLimit] = useState(100)
-  const [selectedTrack, setSelectedTrack] = useState<any>(null)
-  const [chartData, setChartData] = useState<any[]>([])
-  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([])
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadTracks() {
+      setLoading(true)
       try {
-        const data = await fetchTracks({ limit, date: date || undefined, period })
+        const data = await fetchTracks({ 
+          limit, 
+          date: date || undefined, 
+          period,
+          chartType,
+          region,
+        })
         setTracks(data.tracks || [])
         setFilteredTracks(data.tracks || [])
         if (data.date) setDate(data.date)
@@ -50,7 +59,7 @@ export default function TracksPage() {
       }
     }
     loadTracks()
-  }, [date, limit, period])
+  }, [date, limit, period, chartType, region])
 
   useEffect(() => {
     if (searchQuery) {
@@ -64,20 +73,6 @@ export default function TracksPage() {
     }
   }, [searchQuery, tracks])
 
-  useEffect(() => {
-    if (selectedTrack) {
-      async function loadChartData() {
-        try {
-          const res = await fetch(`/api/charts/history?trackId=${selectedTrack.id}&startDate=${availableDates[0]}&endDate=${date}`)
-          const data = await res.json()
-          setChartData(data.history || [])
-        } catch (error) {
-          console.error("Failed to load chart data:", error)
-        }
-      }
-      loadChartData()
-    }
-  }, [selectedTrack, date, availableDates])
 
   if (loading) {
     return (
@@ -93,6 +88,9 @@ export default function TracksPage() {
         <Typography variant="h1">Trending Tracks</Typography>
         <Typography variant="subtitle" className="mt-2">
           {date && `Data as of ${format(new Date(date), 'MMMM d, yyyy')} (${period})`}
+          {chartType === 'viral' && ' - Viral 50'}
+          {chartType === 'regional' && ' - Top 50'}
+          {region && ` - ${region}`}
         </Typography>
       </div>
 
@@ -104,6 +102,17 @@ export default function TracksPage() {
           availableDates={availableDates}
           period={period}
           onPeriodChange={setPeriod}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ChartFilters
+          chartType={chartType}
+          chartPeriod={period}
+          region={region}
+          onChartTypeChange={setChartType}
+          onChartPeriodChange={setPeriod}
+          onRegionChange={setRegion}
         />
       </div>
 
@@ -130,27 +139,8 @@ export default function TracksPage() {
             max={200}
           />
         </div>
-        <div className="flex items-end">
-          <EnrichButton
-            type="track"
-            ids={selectedTrackIds.length > 0 ? selectedTrackIds : filteredTracks.slice(0, 10).map(t => t.id)}
-            size="default"
-          >
-            Enrich Top 10 Tracks
-          </EnrichButton>
-        </div>
       </div>
 
-      {selectedTrack && chartData.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Chart History: {selectedTrack.name} by {selectedTrack.artist}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PositionChart data={chartData} />
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>
@@ -162,6 +152,8 @@ export default function TracksPage() {
                 date: date || undefined,
                 limit: limit,
                 period: period,
+                chartType: chartType,
+                region: region || '',
               }}
             />
           </div>
@@ -177,13 +169,23 @@ export default function TracksPage() {
                 <TableHead>Best Position</TableHead>
                 <TableHead>Days on Chart</TableHead>
                 <TableHead>Streams</TableHead>
+                <TableHead>Preview</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredTracks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No tracks found
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    {tracks.length === 0 ? (
+                      <div>
+                        <p>No tracks found for the selected filters.</p>
+                        <p className="text-sm mt-2">
+                          Upload CSV files using the <a href="/importer" className="text-primary hover:underline">Importer</a> to add data.
+                        </p>
+                      </div>
+                    ) : (
+                      'No tracks match your search query'
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -193,10 +195,26 @@ export default function TracksPage() {
                     <TableRow 
                       key={track.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedTrack(track)}
+                      onClick={() => setSelectedTrackId(track.id)}
                     >
                       <TableCell className="font-medium">{track.position}</TableCell>
-                      <TableCell className="font-semibold">{track.name}</TableCell>
+                      <TableCell className="font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span>{track.name}</span>
+                          <div className="flex gap-1">
+                            {track.isViral && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                Viral
+                              </span>
+                            )}
+                            {track.isTop && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                                Top 50
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
                       <TableCell>{track.artist}</TableCell>
                       <TableCell>
                         {change !== null && change !== 0 ? (
@@ -225,6 +243,22 @@ export default function TracksPage() {
                       <TableCell>
                         {track.streams ? parseInt(track.streams).toLocaleString() : 'N/A'}
                       </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {track.externalId ? (
+                          <a
+                            href={`https://open.spotify.com/track/${track.externalId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Play
+                          </a>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   )
                 })
@@ -233,6 +267,17 @@ export default function TracksPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <TrackModal
+        trackId={selectedTrackId}
+        open={selectedTrackId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTrackId(null)
+        }}
+        chartType={chartType}
+        chartPeriod={period}
+        region={region}
+      />
     </div>
   )
 }

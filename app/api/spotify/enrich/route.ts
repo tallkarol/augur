@@ -17,6 +17,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check Supabase connection
+    const { error: testError } = await supabase.from('artists').select('id').limit(1)
+    if (testError) {
+      console.error('Supabase connection test failed:', testError)
+      return NextResponse.json(
+        { error: `Supabase connection failed: ${testError.message}. Make sure tables exist and RLS policies allow access.` },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json()
     const { type, ids } = body
 
@@ -61,7 +71,7 @@ async function enrichArtists(artistIds: string[]) {
         .single()
 
       if (fetchError || !artist) {
-        results.push({ id: artistId, success: false, error: 'Artist not found' })
+        results.push({ id: artistId, success: false, error: `Artist not found: ${fetchError?.message || 'Unknown error'}` })
         continue
       }
 
@@ -104,21 +114,27 @@ async function enrichArtists(artistIds: string[]) {
       }
 
       // Update artist with Spotify data
+      const updateData: any = {
+        externalId: spotifyArtist.id,
+        imageUrl: spotifyArtist.images[0]?.url || null,
+        genres: spotifyArtist.genres || [],
+        popularity: spotifyArtist.popularity || null,
+      }
+
+      // Only add followers if the column exists (handle BigInt)
+      if (spotifyArtist.followers?.total) {
+        updateData.followers = spotifyArtist.followers.total.toString()
+      }
+
       const { data: updated, error: updateError } = await supabase
         .from('artists')
-        .update({
-          externalId: spotifyArtist.id,
-          imageUrl: spotifyArtist.images[0]?.url || null,
-          genres: spotifyArtist.genres,
-          popularity: spotifyArtist.popularity,
-          followers: spotifyArtist.followers.total,
-        })
+        .update(updateData)
         .eq('id', artistId)
         .select()
         .single()
 
       if (updateError) {
-        throw new Error(`Failed to update artist: ${updateError.message}`)
+        throw new Error(`Failed to update artist: ${updateError.message} (code: ${updateError.code})`)
       }
 
       results.push({
@@ -156,18 +172,15 @@ async function enrichTracks(trackIds: string[]) {
 
   for (const trackId of trackIds) {
     try {
-      // Fetch track with artist from Supabase
+      // Fetch track from Supabase
       const { data: track, error: fetchError } = await supabase
         .from('tracks')
-        .select(`
-          *,
-          artist:artists(*)
-        `)
+        .select('*')
         .eq('id', trackId)
         .single()
 
       if (fetchError || !track) {
-        results.push({ id: trackId, success: false, error: 'Track not found' })
+        results.push({ id: trackId, success: false, error: `Track not found: ${fetchError?.message || 'Unknown error'}` })
         continue
       }
 
@@ -177,7 +190,17 @@ async function enrichTracks(trackIds: string[]) {
         continue
       }
 
-      const artist = Array.isArray(track.artist) ? track.artist[0] : track.artist
+      // Fetch artist separately
+      const { data: artist, error: artistError } = await supabase
+        .from('artists')
+        .select('*')
+        .eq('id', track.artistId)
+        .single()
+
+      if (artistError || !artist) {
+        results.push({ id: trackId, success: false, error: `Artist not found for track: ${artistError?.message || 'Unknown error'}` })
+        continue
+      }
 
       // Try to find Spotify track
       let spotifyTrack = null
@@ -226,22 +249,24 @@ async function enrichTracks(trackIds: string[]) {
       }
 
       // Update track with Spotify data
+      const updateData: any = {
+        externalId: spotifyTrack.id,
+        imageUrl: spotifyTrack.album.images[0]?.url || null,
+        previewUrl: spotifyTrack.preview_url || null,
+        duration: spotifyTrack.duration_ms || null,
+        popularity: spotifyTrack.popularity || null,
+        albumName: spotifyTrack.album.name || null,
+      }
+
       const { data: updated, error: updateError } = await supabase
         .from('tracks')
-        .update({
-          externalId: spotifyTrack.id,
-          imageUrl: spotifyTrack.album.images[0]?.url || null,
-          previewUrl: spotifyTrack.preview_url,
-          duration: spotifyTrack.duration_ms,
-          popularity: spotifyTrack.popularity,
-          albumName: spotifyTrack.album.name,
-        })
+        .update(updateData)
         .eq('id', trackId)
         .select()
         .single()
 
       if (updateError) {
-        throw new Error(`Failed to update track: ${updateError.message}`)
+        throw new Error(`Failed to update track: ${updateError.message} (code: ${updateError.code})`)
       }
 
       results.push({

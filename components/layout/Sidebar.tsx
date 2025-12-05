@@ -4,27 +4,36 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Typography } from "@/components/typography"
+import { ThemeToggle } from "@/components/ThemeToggle"
 import { 
   LayoutDashboard, 
   Users, 
   Music, 
   TrendingUp, 
-  Upload 
+  Upload,
+  Settings,
+  Search
 } from "lucide-react"
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/search", label: "Search", icon: Search },
   { href: "/artists", label: "Artists", icon: Users },
   { href: "/tracks", label: "Tracks", icon: Music },
   { href: "/insights", label: "Insights", icon: TrendingUp },
   { href: "/importer", label: "Importer", icon: Upload },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
 
+  // Separate main nav items from settings
+  const mainNavItems = navItems.filter(item => item.href !== '/admin/settings')
+  const settingsItem = navItems.find(item => item.href === '/admin/settings')
+
   return (
-    <aside className="w-64 border-r bg-card p-6">
+    <aside className="w-64 border-r bg-card p-6 flex flex-col h-screen">
       <div className="mb-8">
         <Typography variant="h2" className="text-primary">
           Augur
@@ -33,8 +42,9 @@ export function Sidebar() {
           Music Analytics
         </Typography>
       </div>
-      <nav className="space-y-2">
-        {navItems.map((item) => {
+      
+      <nav className="space-y-2 flex-1">
+        {mainNavItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href
           return (
@@ -54,6 +64,27 @@ export function Sidebar() {
           )
         })}
       </nav>
+      
+      {/* Bottom section - Theme Toggle above divider */}
+      <div className="mt-auto">
+        <ThemeToggle />
+        <div className="pt-4 border-t mt-2">
+          {settingsItem && (
+            <Link
+              href={settingsItem.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                pathname === settingsItem.href || pathname?.startsWith('/admin')
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Settings className="h-5 w-5" />
+              {settingsItem.label}
+            </Link>
+          )}
+        </div>
+      </div>
     </aside>
   )
 }
