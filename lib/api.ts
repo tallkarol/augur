@@ -1,13 +1,17 @@
 export async function fetchArtists(params?: { 
   date?: string
+  startDate?: string
+  endDate?: string
   limit?: number
   offset?: number
   period?: 'daily' | 'weekly' | 'monthly'
-  chartType?: 'regional' | 'viral'
+  chartType?: 'regional' | 'viral' | 'blended'
   region?: string | null
 }) {
   const searchParams = new URLSearchParams()
   if (params?.date) searchParams.set('date', params.date)
+  if (params?.startDate) searchParams.set('startDate', params.startDate)
+  if (params?.endDate) searchParams.set('endDate', params.endDate)
   if (params?.limit) searchParams.set('limit', params.limit.toString())
   if (params?.offset !== undefined) searchParams.set('offset', params.offset.toString())
   if (params?.period) searchParams.set('period', params.period)
@@ -21,14 +25,18 @@ export async function fetchArtists(params?: {
 
 export async function fetchTracks(params?: { 
   date?: string
+  startDate?: string
+  endDate?: string
   limit?: number
   offset?: number
   period?: 'daily' | 'weekly' | 'monthly'
-  chartType?: 'regional' | 'viral'
+  chartType?: 'regional' | 'viral' | 'blended'
   region?: string | null
 }) {
   const searchParams = new URLSearchParams()
   if (params?.date) searchParams.set('date', params.date)
+  if (params?.startDate) searchParams.set('startDate', params.startDate)
+  if (params?.endDate) searchParams.set('endDate', params.endDate)
   if (params?.limit) searchParams.set('limit', params.limit.toString())
   if (params?.offset !== undefined) searchParams.set('offset', params.offset.toString())
   if (params?.period) searchParams.set('period', params.period)
