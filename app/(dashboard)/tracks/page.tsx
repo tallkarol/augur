@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 import { DateRangeSelector, type DateRange, type DateRangePreset } from "@/components/DateRangeSelector"
 import { ExportButton } from "@/components/ExportButton"
 import { Pagination } from "@/components/Pagination"
@@ -39,11 +38,6 @@ export default function TracksPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
-  const [periodStats, setPeriodStats] = useState<{
-    last30Days?: { highestPosition?: number; averagePosition?: number; daysInTop10?: number; daysInTop20?: number }
-    thisYear?: { highestPosition?: number; averagePosition?: number; daysInTop10?: number; daysInTop20?: number }
-  } | null>(null)
-  const [selectedStatsPeriod, setSelectedStatsPeriod] = useState<'last30Days' | 'thisYear'>('last30Days')
 
   // Load settings on mount
   useEffect(() => {
@@ -141,7 +135,6 @@ export default function TracksPage() {
         setFilteredTracks(data.tracks || [])
         setTotal(data.total || 0)
         if (data.availableDates) setAvailableDates(data.availableDates)
-        if (data.periodStats) setPeriodStats(data.periodStats)
       } catch (error) {
         console.error("Failed to load tracks:", error)
       } finally {
@@ -229,80 +222,6 @@ export default function TracksPage() {
         onChange={handleDateRangeChange}
         onPresetChange={setSelectedPreset}
       />
-
-      {/* Period-Specific Stats */}
-      {periodStats && (periodStats.last30Days || periodStats.thisYear) && (
-        <>
-          <div className="flex gap-2">
-            <Button
-              variant={selectedStatsPeriod === 'last30Days' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedStatsPeriod('last30Days')}
-              className="text-xs"
-            >
-              LAST 30 DAYS
-            </Button>
-            <Button
-              variant={selectedStatsPeriod === 'thisYear' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedStatsPeriod('thisYear')}
-              className="text-xs"
-            >
-              THIS YEAR
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Highest Position</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {selectedStatsPeriod === 'last30Days' 
-                    ? (periodStats.last30Days?.highestPosition ? `#${periodStats.last30Days.highestPosition}` : 'N/A')
-                    : (periodStats.thisYear?.highestPosition ? `#${periodStats.thisYear.highestPosition}` : 'N/A')}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Avg Position</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {selectedStatsPeriod === 'last30Days'
-                    ? (periodStats.last30Days?.averagePosition ? `#${periodStats.last30Days.averagePosition.toFixed(1)}` : 'N/A')
-                    : (periodStats.thisYear?.averagePosition ? `#${periodStats.thisYear.averagePosition.toFixed(1)}` : 'N/A')}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Days in Top 10</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {selectedStatsPeriod === 'last30Days'
-                    ? (periodStats.last30Days?.daysInTop10 ?? 0)
-                    : (periodStats.thisYear?.daysInTop10 ?? 0)}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Days in Top 20</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {selectedStatsPeriod === 'last30Days'
-                    ? (periodStats.last30Days?.daysInTop20 ?? 0)
-                    : (periodStats.thisYear?.daysInTop20 ?? 0)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
 
       {/* Search and Limit */}
       <div className="flex gap-4 flex-wrap">
