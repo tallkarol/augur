@@ -199,13 +199,13 @@ export async function GET(request: NextRequest) {
       .eq('platform', 'spotify')
 
     const periodStats = {
-      last30Days: last30DaysData ? {
+      last30Days: last30DaysData && last30DaysData.length > 0 ? {
         highestPosition: Math.min(...last30DaysData.map(d => d.position)),
         averagePosition: last30DaysData.reduce((sum, d) => sum + d.position, 0) / last30DaysData.length,
         daysInTop10: last30DaysData.filter(d => d.position <= 10).length,
         daysInTop20: last30DaysData.filter(d => d.position <= 20).length,
       } : null,
-      thisYear: thisYearData ? {
+      thisYear: thisYearData && thisYearData.length > 0 ? {
         highestPosition: Math.min(...thisYearData.map(d => d.position)),
         averagePosition: thisYearData.reduce((sum, d) => sum + d.position, 0) / thisYearData.length,
         daysInTop10: thisYearData.filter(d => d.position <= 10).length,
