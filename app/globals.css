@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+}
+
+@layer components {
+  /* TYPOGRAPHY UTILITIES */
+  
+  /* HERO / H1 */
+  .tk-h1 {
+    @apply font-display text-tk-h1 font-semibold tracking-tight text-foreground
+      sm:text-[2.75rem] sm:leading-[3rem]
+      lg:text-[3.25rem] lg:leading-[3.4rem];
+  }
+  
+  /* SECTION H2 */
+  .tk-h2 {
+    @apply font-display text-tk-h2 font-semibold tracking-tight text-foreground
+      sm:text-[2rem] sm:leading-[2.4rem];
+  }
+  
+  /* H3 / Card titles */
+  .tk-h3 {
+    @apply font-display text-tk-h3 font-semibold text-foreground;
+  }
+  
+  /* Subheader / section intro */
+  .tk-subtitle {
+    @apply font-ui text-tk-sub font-medium text-foreground/80;
+  }
+  
+  /* Eyebrow label */
+  .tk-eyebrow {
+    @apply font-ui text-tk-eyebrow font-semibold uppercase tracking-[0.22em]
+      text-muted-foreground;
+  }
+  
+  /* Body text (default) */
+  .tk-body {
+    @apply font-body text-tk-body text-foreground leading-relaxed;
+  }
+  
+  /* Small body text (notes, meta) */
+  .tk-body-sm {
+    @apply font-body text-tk-body-sm text-muted-foreground leading-relaxed;
+  }
+  
+  /* Button text */
+  .tk-button {
+    @apply font-ui text-xs font-semibold uppercase tracking-[0.16em];
+  }
+}
+

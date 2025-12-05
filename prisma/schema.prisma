@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Artist {
+  id          String   @id @default(cuid())
+  name        String
+  platform    String   @default("spotify")
+  externalId  String?
+  imageUrl    String?
+  genres      String[] @default([])
+  popularity  Int?
+  followers   BigInt?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tracks      Track[]
+  chartEntries ChartEntry[]
+
+  @@index([name, platform])
+  @@index([platform])
+  @@map("artists")
+}
+
+model Track {
+  id          String   @id @default(cuid())
+  name        String
+  artistId    String
+  platform    String   @default("spotify")
+  externalId  String?
+  uri         String?
+  imageUrl    String?
+  previewUrl  String?
+  duration    Int?     // Duration in milliseconds
+  popularity  Int?
+  albumName   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  artist      Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  chartEntries ChartEntry[]
+
+  @@index([name, platform])
+  @@index([artistId])
+  @@index([platform])
+  @@map("tracks")
+}
+
+model ChartEntry {
+  id            String   @id @default(cuid())
+  trackId       String
+  artistId      String
+  position      Int
+  date          DateTime
+  platform      String   @default("spotify")
+  chartType     String   @default("regional") // regional, viral
+  chartPeriod   String   @default("daily") // daily, weekly
+  source        String?  // label/distributor
+  peakRank      Int?
+  previousRank  Int?
+  daysOnChart   Int?
+  streams       BigInt?
+  createdAt     DateTime @default(now())
+
+  track         Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  artist        Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([platform, date])
+  @@index([position])
+  @@index([trackId, date])
+  @@index([artistId, date])
+  @@map("chart_entries")
+}
+
